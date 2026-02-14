@@ -16,6 +16,8 @@ function SchedulePageContent() {
   const accountId = searchParams.get('accountId');
   const token = searchParams.get('token');
   const chatwootUrl = searchParams.get('chatwootUrl');
+  const client = searchParams.get('client');
+  const uid = searchParams.get('uid');
 
   const [messages, setMessages] = useState<ScheduledMessage[]>([]);
   const [loading, setLoading] = useState(true);
@@ -67,6 +69,8 @@ function SchedulePageContent() {
             conversationId,
             accountId,
             token,
+            client, // Header adicional
+            uid,    // Header adicional
             chatwootUrl,
           }),
         });

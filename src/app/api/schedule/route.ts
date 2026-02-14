@@ -13,9 +13,12 @@ export async function POST(request: Request) {
       conversationId, 
       accountId, 
       chatwootUrl, 
-      token 
+      token,
+      client, // NOVO
+      uid     // NOVO
     } = body;
 
+    // Nota: client/uid são opcionais no schema, então não precisamos validar estritamente se não quiser
     if (!message || !scheduledAt || !conversationId || !chatwootUrl || !token) {
       return NextResponse.json(
         { error: 'Dados incompletos. Verifique o payload.' },
@@ -31,12 +34,16 @@ export async function POST(request: Request) {
       where: { chatwootUrl: chatwootUrl },
       update: {
         apiAccessToken: token, // Atualiza o token caso tenha mudado
-        accountId: Number(accountId)
+        accountId: Number(accountId),
+        client: client || undefined, // Atualiza se vier
+        uid: uid || undefined        // Atualiza se vier
       },
       create: {
         chatwootUrl,
         apiAccessToken: token,
-        accountId: Number(accountId)
+        accountId: Number(accountId),
+        client: client,
+        uid: uid
       }
     });
 

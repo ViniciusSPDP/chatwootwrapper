@@ -49,6 +49,8 @@ async function processScheduledMessages() {
         method: 'POST',
         headers: {
           'api_access_token': tenant.apiAccessToken,
+          'client': tenant.client || '',
+          'uid': tenant.uid || '',
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({

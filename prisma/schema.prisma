@@ -22,6 +22,8 @@ model Tenant {
   chatwootUrl    String   @unique // <-- ADICIONADO O @unique (Fundamental para o upsert funcionar)
   
   apiAccessToken String   
+  client         String?  // Headers adicionais para auth do Chatwoot
+  uid            String?  // Headers adicionais para auth do Chatwoot
   accountId      Int      
   
   scheduledMessages ScheduledMessage[]
