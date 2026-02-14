@@ -16,7 +16,8 @@ echo "✅ Migrations aplicadas com sucesso."
 
 # Start Worker in Background
 echo "🚀 Starting Background Worker..."
-nohup npx tsx src/worker.ts > /var/log/worker.log 2>&1 &
+# Use /tmp for logs as we are running as non-root (nextjs user)
+nohup npx tsx src/worker.ts > /tmp/worker.log 2>&1 &
 
 echo "🚀 Iniciando servidor Next.js..."
 exec node server.js
