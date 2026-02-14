@@ -94,15 +94,15 @@ function FollowUpPageContent() {
   if (!conversationId) return <div className="p-4">Please open from a conversation.</div>;
 
   return (
-    <div className="p-4 max-w-lg mx-auto font-sans">
+    <div className="p-4 max-w-lg mx-auto font-sans dark:text-gray-100">
       <h2 className="text-xl font-bold mb-4">🔔 Set Follow-up</h2>
 
-      <form onSubmit={handleSubmit} className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+      <form onSubmit={handleSubmit} className="mb-6 p-4 bg-gray-50 dark:bg-zinc-900 rounded-lg border border-gray-200 dark:border-zinc-800">
         <div className="mb-3">
-          <label className="block text-sm font-medium text-gray-700 mb-1">Note</label>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Note</label>
           <input
             type="text"
-            className="w-full p-2 border rounded-md text-sm"
+            className="w-full p-2 border rounded-md text-sm dark:bg-zinc-800 dark:border-zinc-700 dark:text-gray-100"
             value={note}
             onChange={(e) => setNote(e.target.value)}
             placeholder="Call back tomorrow..."
@@ -110,10 +110,10 @@ function FollowUpPageContent() {
           />
         </div>
         <div className="mb-3">
-          <label className="block text-sm font-medium text-gray-700 mb-1">Date & Time</label>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Date & Time</label>
           <input
             type="datetime-local"
-            className="w-full p-2 border rounded-md text-sm"
+            className="w-full p-2 border rounded-md text-sm dark:bg-zinc-800 dark:border-zinc-700 dark:text-gray-100"
             value={date}
             onChange={(e) => setDate(e.target.value)}
             required
@@ -137,28 +137,28 @@ function FollowUpPageContent() {
       ) : (
         <div className="space-y-3">
           {followUps.map((item) => (
-            <div key={item.id} className={`p-3 border rounded-lg shadow-sm ${item.status === 'DONE' ? 'bg-gray-100 opacity-70' : 'bg-white'}`}>
+            <div key={item.id} className={`p-3 border rounded-lg shadow-sm ${item.status === 'DONE' ? 'bg-gray-100 dark:bg-zinc-800 opacity-70' : 'bg-white dark:bg-zinc-900'} dark:border-zinc-800`}>
               <div className="flex justify-between items-start mb-1">
-                <span className="text-xs font-semibold px-2 py-0.5 rounded bg-purple-100 text-purple-800">
+                <span className="text-xs font-semibold px-2 py-0.5 rounded bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200">
                   {new Date(item.scheduledAt).toLocaleString()}
                 </span>
-                <span className={`text-xs px-2 py-0.5 rounded ${item.status === 'DONE' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                <span className={`text-xs px-2 py-0.5 rounded ${item.status === 'DONE' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'}`}>
                   {item.status}
                 </span>
               </div>
-              <p className="text-sm text-gray-800 mb-2">{item.note}</p>
+              <p className="text-sm text-gray-800 dark:text-gray-200 mb-2">{item.note}</p>
               <div className="flex justify-end gap-2">
                 {item.status !== 'DONE' && (
                   <button
                     onClick={() => handleStatusChange(item.id, 'DONE')}
-                    className="text-xs text-green-600 hover:underline"
+                    className="text-xs text-green-600 hover:underline dark:text-green-400"
                   >
                     Mark Done
                   </button>
                 )}
                 <button
                   onClick={() => handleDelete(item.id)}
-                  className="text-xs text-red-600 hover:underline"
+                  className="text-xs text-red-600 hover:underline dark:text-red-400"
                 >
                   Delete
                 </button>

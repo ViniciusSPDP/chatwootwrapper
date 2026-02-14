@@ -24,3 +24,12 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Force dark mode styles for inputs if system is dark */
+@media (prefers-color-scheme: dark) {
+  input, textarea, select {
+    background-color: #171717;
+    border-color: #404040;
+    color: #ededed;
+  }
+}
