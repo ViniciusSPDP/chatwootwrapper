@@ -9,8 +9,8 @@ fi
 
 echo "🔄 Rodando Prisma Migrations (Usando binário local)..."
 
-# MUDANÇA AQUI: Usamos o caminho direto em vez de npx
-./node_modules/.bin/prisma migrate deploy
+# MUDANÇA AQUI: Usamos npx para garantir que o prisma carregue o config.ts via tsx/jiti
+npx prisma migrate deploy
 
 echo "✅ Migrations aplicadas com sucesso."
 

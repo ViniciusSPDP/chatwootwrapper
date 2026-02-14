@@ -40,6 +40,10 @@ COPY --from=builder /app/public ./public
 
 # 2. Copia a pasta prisma (Necessário para rodar migrations)
 COPY --from=builder /app/prisma ./prisma
+COPY prisma.config.ts ./
+
+# Instala prisma CLI e tsx para rodar migrations em produção
+RUN npm install prisma@7.4.0 tsx --no-save
 
 # 3. Copia o build otimizado
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
