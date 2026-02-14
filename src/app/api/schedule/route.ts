@@ -53,6 +53,7 @@ export async function POST(request: Request) {
 
     console.log(`✅ Agendado com sucesso! ID: ${agendamento.id}`);
 
+
     // 4. Retornar sucesso
     return NextResponse.json({ 
       success: true, 
@@ -65,5 +66,30 @@ export async function POST(request: Request) {
       { error: 'Erro interno no servidor' }, 
       { status: 500 }
     );
+  }
+}
+
+export async function GET(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const conversationId = searchParams.get('conversationId');
+
+    if (!conversationId) {
+      return NextResponse.json({ error: 'Conversation ID required' }, { status: 400 });
+    }
+
+    const messages = await prisma.scheduledMessage.findMany({
+      where: {
+        conversationId: Number(conversationId)
+      },
+      orderBy: {
+        scheduledAt: 'asc'
+      }
+    });
+
+    return NextResponse.json({ success: true, data: messages });
+  } catch (error) {
+    console.error('❌ Erro ao buscar agendamentos:', error);
+    return NextResponse.json({ error: 'Erro interno' }, { status: 500 });
   }
 }
