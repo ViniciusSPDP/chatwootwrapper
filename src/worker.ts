@@ -1,15 +1,17 @@
-
 import prisma from './lib/prisma';
 
 async function processScheduledMessages() {
   const now = new Date();
   
+  // LOG DE DEPURAÇÃO: Verificando o tempo atual do servidor
+  console.log(`[Worker][${now.toISOString()}] Verificando mensagens pendentes...`);
+
   // 1. Find pending messages that are due
   const messages = await prisma.scheduledMessage.findMany({
     where: {
       status: 'PENDING',
       scheduledAt: {
-        lte: now
+        lte: now // Menor ou igual a "agora"
       }
     },
     include: {
@@ -17,18 +19,29 @@ async function processScheduledMessages() {
     }
   });
 
-  if (messages.length > 0) {
-    console.log(`[Worker] Found ${messages.length} messages to send.`);
+  // LOG DE DEPURAÇÃO: Mostrar quantas foram encontradas e o critério de tempo
+  if (messages.length === 0) {
+    // Vamos verificar se existe ALGUMA mensagem pendente, mesmo que seja para o futuro
+    const anyPending = await prisma.scheduledMessage.findFirst({
+      where: { status: 'PENDING' },
+      orderBy: { scheduledAt: 'asc' }
+    });
+    
+    if (anyPending) {
+      console.log(`[Worker] Nenhuma mensagem pronta para envio. Próxima mensagem pendente está agendada para: ${anyPending.scheduledAt.toISOString()}`);
+    } else {
+      console.log(`[Worker] Nenhuma mensagem pendente encontrada no banco.`);
+    }
+  } else {
+    console.log(`[Worker] Encontradas ${messages.length} mensagens para enviar.`);
   }
 
   for (const msg of messages) {
     try {
-      console.log(`[Worker] Sending message ${msg.id} to Conversation ${msg.conversationId}...`);
+      console.log(`[Worker] Enviando MSG ID: ${msg.id} | Agendada para: ${msg.scheduledAt.toISOString()}`);
       
       const { tenant } = msg;
 
-      // 2. Send to Chatwoot
-      // POST /api/v1/accounts/{accountId}/conversations/{conversationId}/messages
       const url = `${tenant.chatwootUrl}/api/v1/accounts/${tenant.accountId}/conversations/${msg.conversationId}/messages`;
       
       const response = await fetch(url, {
@@ -49,18 +62,16 @@ async function processScheduledMessages() {
         throw new Error(`Chatwoot API Error: ${response.status} - ${errText}`);
       }
 
-      // 3. Mark as SENT
       await prisma.scheduledMessage.update({
         where: { id: msg.id },
         data: { status: 'SENT', errorLog: null }
       });
       
-      console.log(`[Worker] Message ${msg.id} sent successfully.`);
+      console.log(`[Worker] Mensagem ${msg.id} enviada com sucesso.`);
 
     } catch (error: any) {
-      console.error(`[Worker] Failed to send message ${msg.id}:`, error.message);
+      console.error(`[Worker] Falha ao enviar mensagem ${msg.id}:`, error.message);
       
-      // Mark as FAILED (or retry logic could go here)
       await prisma.scheduledMessage.update({
         where: { id: msg.id },
         data: { 
@@ -73,18 +84,26 @@ async function processScheduledMessages() {
 }
 
 async function startWorker() {
-  console.log('[Worker] Starting polling loop...');
+  // Garantir que o log de início apareça
+  console.log('==============================================');
+  console.log('[Worker] Iniciando loop de varredura...');
+  console.log(`[Worker] Hora atual do servidor: ${new Date().toISOString()}`);
+  console.log('==============================================');
   
-  // Run immediately then every 60 seconds
-  await processScheduledMessages();
+  // Executa imediatamente
+  await processScheduledMessages().catch(err => {
+    console.error('[Worker] Erro crítico na execução inicial:', err);
+  });
 
+  // Agenda para cada 60 segundos
   setInterval(async () => {
     try {
       await processScheduledMessages();
     } catch (err) {
-      console.error('[Worker] Error in loop:', err);
+      console.error('[Worker] Erro no loop de intervalo:', err);
     }
-  }, 60000); // Check every minute
+  }, 60000);
 }
 
+// Inicia o processo
 startWorker();
