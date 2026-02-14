@@ -1,139 +1,216 @@
-<script>
 (function() {
-  'use strict';
+  console.log('🚀 Chatwoot Wrapper: Frontend V1 Iniciado...');
 
-  // ⚠️ CONFIGURAÇÃO: URL do seu Wrapper
   const SAAS_API_URL = 'https://qpassa-chatwootwrapper.v1dvzt.easypanel.host/api/schedule';
 
-  console.log('🚀 Chatwoot Scheduler: Iniciado...');
+  // ============================================================
+  // 1. ESTILOS CSS (Injetados no Head)
+  // ============================================================
+  function injectStyles() {
+    if (document.getElementById('saas-wrapper-css')) return;
+    const style = document.createElement('style');
+    style.id = 'saas-wrapper-css';
+    style.textContent = `
+      /* Overlay do Modal */
+      .saas-modal-overlay {
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0, 0, 0, 0.5); z-index: 9999;
+        display: flex; align-items: center; justify-content: center;
+        opacity: 0; visibility: hidden; transition: all 0.2s;
+      }
+      .saas-modal-overlay.open { opacity: 1; visibility: visible; }
 
-  var currentConversationId = null;
-  var observer = null;
-  var lastUrl = location.href;
+      /* O Modal em si */
+      .saas-modal-content {
+        background: white; width: 400px; padding: 24px; border-radius: 12px;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.1); font-family: -apple-system, sans-serif;
+        transform: scale(0.95); transition: transform 0.2s;
+      }
+      .saas-modal-overlay.open .saas-modal-content { transform: scale(1); }
 
-  // 1. AUTH
+      /* Elementos do Form */
+      .saas-h2 { margin: 0 0 16px 0; font-size: 18px; color: #1f2937; }
+      .saas-label { display: block; font-size: 14px; color: #4b5563; margin-bottom: 6px; }
+      .saas-input, .saas-textarea {
+        width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;
+        margin-bottom: 16px; font-size: 14px; box-sizing: border-box;
+      }
+      .saas-textarea { height: 100px; resize: vertical; }
+
+      /* Botões */
+      .saas-actions { display: flex; justify-content: flex-end; gap: 10px; }
+      .saas-btn { padding: 8px 16px; border-radius: 6px; border: none; cursor: pointer; font-weight: 500; }
+      .saas-btn-cancel { background: #f3f4f6; color: #374151; }
+      .saas-btn-save { background: #10B981; color: white; }
+      .saas-btn-save:disabled { background: #a7f3d0; cursor: not-allowed; }
+    `;
+    document.head.appendChild(style);
+  }
+
+  // ============================================================
+  // 2. LÓGICA DE AUTENTICAÇÃO (Roubar Cookie do Chatwoot)
+  // ============================================================
   function getAuthFromCookie() {
-    var cookies = document.cookie.split(';');
-    for (var i = 0; i < cookies.length; i++) {
-      var cookie = cookies[i].trim();
-      if (cookie.indexOf('cw_d_session_info=') === 0) {
+    // Procura o cookie específico do Chatwoot
+    const cookies = document.cookie.split(';');
+    for (let i = 0; i < cookies.length; i++) {
+      const cookie = cookies[i].trim();
+      if (cookie.startsWith('cw_d_session_info=')) {
         try {
-          var value = cookie.substring('cw_d_session_info='.length);
-          var parsed = JSON.parse(decodeURIComponent(value));
-          if (parsed['access-token'] && parsed['uid']) {
-            return { token: parsed['access-token'], client: parsed['client'], uid: parsed['uid'], accountId: 1 };
-          }
-        } catch (e) {}
+          const value = cookie.substring('cw_d_session_info='.length);
+          const parsed = JSON.parse(decodeURIComponent(value));
+          // Retorna os dados que precisamos
+          return {
+            token: parsed['access-token'],
+            uid: parsed['uid'],
+            client: parsed['client'],
+            accountId: 1 // TODO: Tentar pegar da URL se possível, ou usar default
+          };
+        } catch (e) {
+          console.error('Erro ao ler cookie', e);
+        }
       }
     }
+    // Fallback: Se não achar cookie, retorna null
     return null;
   }
 
-  function getConversationIdFromUrl() {
-    var match = location.pathname.match(/\/conversations\/(\d+)/);
-    return match ? parseInt(match[1]) : null;
-  }
-
-  // 2. CSS
-  function injectCSS() {
-    if (document.getElementById('cw-scheduler-css')) return;
-    var css = document.createElement('style');
-    css.id = 'cw-scheduler-css';
-    css.textContent = `
-      #cw-scheduler-btn { display: inline-flex; align-items: center; justify-content: center; min-width: 32px; height: 32px; gap: 4px; padding: 0 8px; border-radius: 8px; background: rgba(16, 185, 129, 0.1); color: #10B981; font-size: 14px; font-weight: 600; cursor: pointer; border:none; margin-left: 8px; transition:0.2s; }
-      #cw-scheduler-btn:hover { background: rgba(16, 185, 129, 0.2); }
-      #cw-scheduler-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: none; align-items: center; justify-content: center; z-index: 9999; }
-      #cw-scheduler-overlay.visible { display: flex; }
-      #cw-scheduler-modal { background: #fff; width: 90%; max-width: 420px; border-radius: 12px; box-shadow: 0 20px 25px rgba(0,0,0,0.1); overflow: hidden; font-family: system-ui, -apple-system, sans-serif; }
-      .cw-modal-header { padding: 16px 20px; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center; }
-      .cw-modal-content { padding: 20px; }
-      .cw-input, .cw-textarea { width: 100%; padding: 8px; border: 1px solid #d1d5db; border-radius: 6px; margin-bottom: 15px; display:block; box-sizing:border-box; }
-      .cw-textarea { height: 100px; }
-      .cw-actions { display: flex; justify-content: flex-end; gap: 10px; }
-      .cw-btn { padding: 8px 16px; border-radius: 6px; border: none; cursor: pointer; font-weight: 500; }
-      .cw-btn-save { background: #10B981; color: white; }
-    `;
-    document.head.appendChild(css);
-  }
-
-  // 3. BOTÃO
-  function createHeaderButton() {
-    if (document.getElementById('cw-scheduler-btn')) return true;
-    
-    // Tenta achar o container
-    var actionsContainer = document.querySelector('.conversation-header .actions-container');
-    
-    // Fallback: Procura botões se o seletor falhar
-    if (!actionsContainer) {
-       var btns = document.querySelectorAll('button');
-       for(var i=0; i<btns.length; i++) {
-         var r = btns[i].getBoundingClientRect();
-         if(r.top < 150 && r.left > window.innerWidth/2 && btns[i].parentElement.children.length > 1) {
-            actionsContainer = btns[i].parentElement;
-            break;
-         }
-       }
-    }
-
-    if (!actionsContainer) return false;
-
-    var btn = document.createElement('button');
-    btn.id = 'cw-scheduler-btn';
-    btn.innerHTML = '<span>🕒</span><span>Agendar</span>';
-    btn.onclick = function(e) { e.preventDefault(); openModal(); };
-
-    if (actionsContainer.firstChild) actionsContainer.insertBefore(btn, actionsContainer.firstChild);
-    else actionsContainer.appendChild(btn);
-    return true;
-  }
-
-  // 4. MODAL
+  // ============================================================
+  // 3. CONSTRUÇÃO DO MODAL
+  // ============================================================
   function createModal() {
-    if (document.getElementById('cw-scheduler-overlay')) return;
-    var html = `<div id="cw-scheduler-overlay"><div id="cw-scheduler-modal"><div class="cw-modal-header"><h3>📅 Agendar</h3><button onclick="document.getElementById('cw-scheduler-overlay').classList.remove('visible')" style="border:none;background:none;font-size:20px;cursor:pointer">&times;</button></div><div class="cw-modal-content"><label>Mensagem</label><textarea id="cw-sched-msg" class="cw-textarea"></textarea><label>Data</label><input type="datetime-local" id="cw-sched-date" class="cw-input"><div class="cw-actions"><button class="cw-btn" onclick="document.getElementById('cw-scheduler-overlay').classList.remove('visible')">Cancelar</button><button class="cw-btn cw-btn-save" id="cw-sched-submit">Agendar</button></div></div></div></div>`;
-    document.body.insertAdjacentHTML('beforeend', html);
-    document.getElementById('cw-sched-submit').onclick = submitSchedule;
+    if (document.getElementById('saas-schedule-modal')) return;
+
+    const modalHTML = `
+      <div class="saas-modal-overlay" id="saas-schedule-modal">
+        <div class="saas-modal-content">
+          <h2 class="saas-h2">📅 Agendar Mensagem</h2>
+          
+          <label class="saas-label">Mensagem:</label>
+          <textarea id="saas-msg-text" class="saas-textarea" placeholder="Digite sua mensagem aqui..."></textarea>
+          
+          <label class="saas-label">Data e Hora:</label>
+          <input type="datetime-local" id="saas-msg-date" class="saas-input">
+
+          <div class="saas-actions">
+            <button class="saas-btn saas-btn-cancel" id="saas-btn-close">Cancelar</button>
+            <button class="saas-btn saas-btn-save" id="saas-btn-submit">Agendar Envio</button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+
+    // Event Listeners do Modal
+    document.getElementById('saas-btn-close').onclick = closeModal;
+    document.getElementById('saas-schedule-modal').onclick = (e) => {
+      if (e.target.id === 'saas-schedule-modal') closeModal();
+    };
+    document.getElementById('saas-btn-submit').onclick = submitSchedule;
   }
 
   function openModal() {
-    createModal();
-    document.getElementById('cw-scheduler-overlay').classList.add('visible');
-    var now = new Date(); now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-    document.getElementById('cw-sched-date').value = now.toISOString().slice(0, 16);
+    createModal(); // Garante que existe
+    const modal = document.getElementById('saas-schedule-modal');
+    modal.classList.add('open');
+    
+    // Define data mínima como "Agora"
+    const now = new Date();
+    now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+    document.getElementById('saas-msg-date').value = now.toISOString().slice(0, 16);
   }
 
-  async function submitSchedule() {
-    var btn = document.getElementById('cw-sched-submit');
-    var msg = document.getElementById('cw-sched-msg').value;
-    var date = document.getElementById('cw-sched-date').value;
-    var auth = getAuthFromCookie();
-    var convId = getConversationIdFromUrl();
+  function closeModal() {
+    const modal = document.getElementById('saas-schedule-modal');
+    if (modal) modal.classList.remove('open');
+  }
 
-    if (!auth) return alert('Erro: Logue novamente no Chatwoot');
-    
-    btn.innerText = '...';
+  // ============================================================
+  // 4. ENVIO PARA API (O fetch)
+  // ============================================================
+  async function submitSchedule() {
+    const btn = document.getElementById('saas-btn-submit');
+    const text = document.getElementById('saas-msg-text').value;
+    const date = document.getElementById('saas-msg-date').value;
+    const auth = getAuthFromCookie();
+    const conversationId = window.location.pathname.match(/\/conversations\/(\d+)/)?.[1];
+
+    if (!text || !date) return alert('Preencha todos os campos!');
+    if (!auth) return alert('Erro de autenticação: Não consegui ler o cookie do Chatwoot.');
+
     try {
-      var res = await fetch(SAAS_API_URL, {
+      btn.innerText = 'Enviando...';
+      btn.disabled = true;
+
+      const payload = {
+        message: text,
+        scheduledAt: new Date(date).toISOString(),
+        conversationId: parseInt(conversationId),
+        accountId: auth.accountId, 
+        chatwootUrl: window.location.origin, // Pega a URL atual (ex: app.chatwoot.com)
+        token: auth.token // Token roubado do cookie
+      };
+
+      const res = await fetch(SAAS_API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: msg, scheduledAt: new Date(date).toISOString(), conversationId: convId, accountId: auth.accountId, chatwootUrl: location.origin, token: auth.token })
+        body: JSON.stringify(payload)
       });
-      if (res.ok) { alert('Sucesso!'); document.getElementById('cw-scheduler-overlay').classList.remove('visible'); }
-      else { alert('Erro ao salvar'); }
-    } catch (e) { alert('Erro de conexão'); } finally { btn.innerText = 'Agendar'; }
+
+      const data = await res.json();
+
+      if (res.ok) {
+        alert('✅ Mensagem agendada com sucesso!');
+        closeModal();
+        document.getElementById('saas-msg-text').value = ''; // Limpa
+      } else {
+        alert('Erro: ' + (data.error || 'Falha desconhecida'));
+      }
+
+    } catch (err) {
+      console.error(err);
+      alert('Erro de conexão com o servidor SaaS.');
+    } finally {
+      btn.innerText = 'Agendar Envio';
+      btn.disabled = false;
+    }
   }
 
-  // 5. INIT
-  function init() {
-    injectCSS(); createModal();
-    var check = () => { if(getConversationIdFromUrl()) createHeaderButton(); };
-    window.addEventListener('popstate', check);
-    document.addEventListener('click', () => setTimeout(check, 200));
-    setInterval(check, 1000); 
+  // ============================================================
+  // 5. INJEÇÃO DO BOTÃO (Lógica anterior melhorada)
+  // ============================================================
+  let observer = null;
+
+  function startObserver() {
+    injectStyles(); // Já garante o CSS
+
+    if (observer) observer.disconnect();
+    observer = new MutationObserver(() => {
+      const header = document.querySelector('.conversation-header .actions-container') 
+                  || document.querySelector('.conversation--header');
+      
+      if (header && !document.getElementById('saas-wrapper-btn')) {
+        const btn = document.createElement('button');
+        btn.id = 'saas-wrapper-btn';
+        btn.innerHTML = '🕒 Agendar';
+        btn.style.cssText = `
+          background: #10B981; color: white; border: none; padding: 6px 12px;
+          border-radius: 6px; margin-left: 8px; cursor: pointer; font-weight: 600;
+          display: inline-flex; align-items: center; gap: 5px;
+        `;
+        btn.onclick = openModal;
+        
+        // Insere no início dos botões
+        if (header.firstChild) header.insertBefore(btn, header.firstChild);
+        else header.appendChild(btn);
+      }
+    });
+
+    observer.observe(document.body, { childList: true, subtree: true });
   }
-  
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
-  else init();
+
+  // Start
+  startObserver();
 
 })();
-</script>

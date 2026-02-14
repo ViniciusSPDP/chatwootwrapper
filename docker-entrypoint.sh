@@ -7,12 +7,12 @@ if [ -z "$DATABASE_URL" ]; then
   exit 1
 fi
 
-echo "🔄 Rodando Prisma Migrations..."
-# Roda as migrações de produção (não cria arquivos, só aplica no banco)
-npx prisma migrate deploy
+echo "🔄 Rodando Prisma Migrations (Usando binário local)..."
+
+# MUDANÇA AQUI: Usamos o caminho direto em vez de npx
+./node_modules/.bin/prisma migrate deploy
 
 echo "✅ Migrations aplicadas com sucesso."
 
 echo "🚀 Iniciando servidor Next.js..."
-# Executa o comando original do container
 exec node server.js
