@@ -1,0 +1,62 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Tenant {
+  id             String   @id @default(uuid())
+  
+  // Mudanças aqui:
+  name           String?  // <-- Virou Opcional (?)
+  email          String?  // <-- Virou Opcional (?) e removemos o @unique por enquanto
+  chatwootUrl    String   @unique // <-- ADICIONADO O @unique (Fundamental para o upsert funcionar)
+  
+  apiAccessToken String   
+  accountId      Int      
+  
+  scheduledMessages ScheduledMessage[]
+  followUps         FollowUp[]
+  
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+// Os outros models (ScheduledMessage e FollowUp) podem ficar iguais
+model ScheduledMessage {
+  id             String   @id @default(uuid())
+  tenantId       String
+  tenant         Tenant   @relation(fields: [tenantId], references: [id])
+  
+  conversationId Int      
+  content        String   
+  attachmentUrl  String?  
+  scheduledAt    DateTime 
+  status         String   @default("PENDING") 
+  
+  errorLog       String?  
+  
+  createdAt      DateTime @default(now())
+}
+
+model FollowUp {
+  id             String   @id @default(uuid())
+  tenantId       String
+  tenant         Tenant   @relation(fields: [tenantId], references: [id])
+  
+  conversationId Int
+  note           String   
+  scheduledAt    DateTime
+  status         String   @default("PENDING") 
+  
+  createdAt      DateTime @default(now())
+}
