@@ -46,7 +46,7 @@ COPY --from=builder /app/prisma ./prisma
 COPY prisma.config.ts ./
 
 # Instala prisma CLI e tsx para rodar migrations em produção
-RUN npm install prisma@7.4.0 tsx dotenv --no-save
+RUN npm install prisma@7.4.0 @prisma/client@7.4.0 @prisma/adapter-pg@7.4.0 pg tsx dotenv --no-save
 
 # 3. Copia o build otimizado
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
