@@ -38,12 +38,15 @@ RUN adduser --system --uid 1001 nextjs
 # 1. Copia a pasta public
 COPY --from=builder /app/public ./public
 
+# 1.1 Copia a pasta src (Necessário para o worker)
+COPY --from=builder /app/src ./src
+
 # 2. Copia a pasta prisma (Necessário para rodar migrations)
 COPY --from=builder /app/prisma ./prisma
 COPY prisma.config.ts ./
 
 # Instala prisma CLI e tsx para rodar migrations em produção
-RUN npm install prisma@7.4.0 tsx --no-save
+RUN npm install prisma@7.4.0 tsx dotenv --no-save
 
 # 3. Copia o build otimizado
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
