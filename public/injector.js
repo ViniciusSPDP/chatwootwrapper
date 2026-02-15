@@ -69,8 +69,7 @@
           return {
             token: parsed['access-token'],
             uid: parsed['uid'],
-            client: parsed['client'],
-            accountId: 1 // Default, can be dynamic
+            client: parsed['client']
           };
         } catch (e) {
           console.error('[SaaS Wrapper] Cookie parsing error', e);
@@ -79,6 +78,8 @@
     }
     return null;
   }
+
+
 
   function getConversationIdFromUrl() {
     const match = window.location.pathname.match(/\/conversations\/(\d+)/);
@@ -110,7 +111,7 @@
     };
   }
 
-  function openPanel(page) {
+  async function openPanel(page) {
     createPanel();
     const overlay = document.getElementById('saas-panel-overlay');
     const iframe = document.getElementById('saas-iframe');
@@ -121,14 +122,37 @@
       return;
     }
 
+    // Fetch Profile to get Account ID
+    let accountId = 1;
+    try {
+      const res = await fetch(`${BASE_URL}/api/v1/profile`, {
+        headers: {
+          'api_access_token': auth.token,
+          'client': auth.client,
+          'uid': auth.uid
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.accounts && data.accounts.length > 0) {
+          // Prefer the first active account or just the first one
+          accountId = data.accounts[0].id;
+        } else if (data.account_id) {
+          accountId = data.account_id;
+        }
+      }
+    } catch (e) {
+      console.error('[SaaS Wrapper] Failed to fetch profile:', e);
+    }
+
     const conversationId = getConversationIdFromUrl();
 
     // Construct URL with params
     const params = new URLSearchParams({
       token: auth.token,
-      accountId: auth.accountId,
-      client: auth.client, // ADICIONADO: client
-      uid: auth.uid,       // ADICIONADO: uid
+      accountId: accountId.toString(),
+      client: auth.client,
+      uid: auth.uid,
       chatwootUrl: window.location.origin,
     });
 
