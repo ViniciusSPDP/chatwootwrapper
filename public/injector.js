@@ -246,29 +246,110 @@
     const iconFollowup = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>`;
 
     addSidebarItem(MENU_LABEL_SCHEDULE, iconSchedule, 'saas-schedule-btn', 'schedule');
-    addSidebarItem(MENU_LABEL_FOLLOWUP, iconFollowup, 'saas-followup-btn', 'followup');
+
   }
 
   // ============================================================
   // 5. INJEÇÃO WIDGET NA CONVERSA
   // ============================================================
-  function injectConversationWidget() {
-    const observer = new MutationObserver(() => {
-      const header = document.querySelector('.conversation-header .actions-container')
-        || document.querySelector('.conversation--header');
+  // ============================================================
+  // 5. INJEÇÃO BOTÃO HEADER
+  // ============================================================
+  function createHeaderButton() {
+    if (document.getElementById('saas-floating-widget')) return true;
 
-      if (header && !document.getElementById('saas-floating-widget')) {
-        const btn = document.createElement('button');
-        btn.id = 'saas-floating-widget';
-        btn.innerHTML = `<span>📅</span> Agendar`;
-        btn.onclick = () => openPanel('schedule');
+    // 1. Tenta achar o container de ações (botões 28-40px no topo direito)
+    const allButtons = document.querySelectorAll('button');
+    let actionsContainer = null;
+    let siblingBtn = null;
 
-        if (header.firstChild) header.insertBefore(btn, header.firstChild);
-        else header.appendChild(btn);
+    for (let i = 0; i < allButtons.length; i++) {
+      const btn = allButtons[i];
+      const rect = btn.getBoundingClientRect();
+
+      // Critérios: tamanho de ícone e posição à direita
+      if (rect.width >= 28 && rect.width <= 40 && rect.height >= 28 && rect.height <= 40) {
+        if (rect.left > window.innerWidth * 0.5) { // Está na metade direita da tela
+          const parent = btn.parentElement;
+          if (parent) {
+            const siblings = parent.querySelectorAll(':scope > button');
+            // Geralmente o header tem entre 2 e 6 botões
+            if (siblings.length >= 2 && siblings.length <= 8) {
+              actionsContainer = parent;
+              siblingBtn = btn;
+              break;
+            }
+          }
+        }
       }
-    });
+    }
 
+    // 2. Fallback: Procura por texto "Ações da conversa" (se existir em pt-BR)
+    if (!actionsContainer) {
+      const allSpans = document.querySelectorAll('span');
+      for (let j = 0; j < allSpans.length; j++) {
+        if (allSpans[j].textContent.trim() === 'Ações da conversa' || allSpans[j].textContent.trim() === 'Conversation actions') {
+          const section = allSpans[j].closest('div');
+          if (section && section.parentElement) {
+            const parentDiv = section.parentElement;
+            // Procura container de botões acima do título
+            const divsAbove = parentDiv.querySelectorAll('div');
+            for (let k = 0; k < divsAbove.length; k++) {
+              const btns = divsAbove[k].querySelectorAll(':scope > button');
+              if (btns.length >= 2) {
+                actionsContainer = divsAbove[k];
+                siblingBtn = btns[0];
+                break;
+              }
+            }
+          }
+          break;
+        }
+      }
+    }
+
+    if (!actionsContainer) return false;
+
+    // Criar o botão
+    const btn = document.createElement('button');
+    btn.id = 'saas-floating-widget';
+    btn.title = 'Agendar Mensagem';
+
+    // Copiar classes do irmão para parecer nativo
+    if (siblingBtn) {
+      btn.className = siblingBtn.className;
+    } else {
+      // Fallback de estilo se não tiver irmão (improvável se achou container)
+      btn.style.cssText = "display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 8px; cursor: pointer; color: inherit;";
+    }
+
+    // Ícone de Calendário
+    btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>`;
+
+    btn.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      openPanel('schedule');
+    };
+
+    // Inserir como primeiro ícone (ou último, dependendo da preferência)
+    // Aqui inserimos no início para destaque
+    if (actionsContainer.firstChild) {
+      actionsContainer.insertBefore(btn, actionsContainer.firstChild);
+    } else {
+      actionsContainer.appendChild(btn);
+    }
+
+    return true;
+  }
+
+  function monitorHeaderConfig() {
+    const observer = new MutationObserver(() => {
+      createHeaderButton();
+    });
     observer.observe(document.body, { childList: true, subtree: true });
+    // Tenta criar imediatamente também
+    createHeaderButton();
   }
 
   // ============================================================
@@ -286,7 +367,7 @@
       if (attempts > 20) clearInterval(interval);
     }, 1000);
 
-    injectConversationWidget();
+    monitorHeaderConfig();
   }
 
   if (document.readyState === 'loading') {
