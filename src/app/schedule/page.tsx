@@ -55,7 +55,7 @@ function SchedulePageContent() {
         await fetch(`/api/schedule/${editingId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message: newMessage, scheduledAt: newDate }),
+          body: JSON.stringify({ message: newMessage, scheduledAt: new Date(newDate).toISOString() }),
         });
         setEditingId(null);
       } else {
@@ -65,7 +65,7 @@ function SchedulePageContent() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             message: newMessage,
-            scheduledAt: newDate,
+            scheduledAt: new Date(newDate).toISOString(), // Importante: converter para ISO (UTC)
             conversationId,
             accountId,
             token,
@@ -87,7 +87,11 @@ function SchedulePageContent() {
   const handleEdit = (msg: ScheduledMessage) => {
     setEditingId(msg.id);
     setNewMessage(msg.content);
-    setNewDate(new Date(msg.scheduledAt).toISOString().slice(0, 16));
+
+    // Ajustar UTC do banco para Local Time do Input
+    const date = new Date(msg.scheduledAt);
+    const localIso = new Date(date.getTime() - (date.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
+    setNewDate(localIso);
   };
 
   const handleDelete = async (id: string) => {
