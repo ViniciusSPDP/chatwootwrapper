@@ -29,12 +29,16 @@ export async function POST(request: Request) {
     console.log(`📩 Recebido agendamento para conversa ${conversationId}`);
 
     // 2. Encontrar ou Criar o Tenant (Auto-Onboarding)
-    // Usamos 'upsert': se existe atualiza o token, se não existe cria.
+    // Usamos 'upsert' com a chave composta: chatwootUrl + accountId
     const tenant = await prisma.tenant.upsert({
-      where: { chatwootUrl: chatwootUrl },
+      where: { 
+        chatwootUrl_accountId: {
+          chatwootUrl: chatwootUrl,
+          accountId: Number(accountId)
+        }
+      },
       update: {
         apiAccessToken: token, // Atualiza o token caso tenha mudado
-        accountId: Number(accountId),
         client: client || undefined, // Atualiza se vier
         uid: uid || undefined        // Atualiza se vier
       },
