@@ -45,19 +45,41 @@ async function processScheduledMessages() {
 
       const url = `${tenant.chatwootUrl}/api/v1/accounts/${tenant.accountId}/conversations/${msg.conversationId}/messages`;
       
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'api_access_token': tenant.apiAccessToken,
-          'client': tenant.client || '',
-          'uid': tenant.uid || '',
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
+      let body: string | FormData;
+      const headers: Record<string, string> = {
+        'access-token': tenant.apiAccessToken, // FIXED: header name must be 'access-token'
+        'client': tenant.client || '',
+        'uid': tenant.uid || '',
+      };
+
+      if (msg.attachmentUrl) {
+        // Prepare FormData for attachment
+        const attachmentRes = await fetch(msg.attachmentUrl);
+        if (!attachmentRes.ok) throw new Error(`Failed to fetch attachment: ${attachmentRes.statusText}`);
+        const blob = await attachmentRes.blob();
+        
+        const formData = new FormData();
+        formData.append('content', msg.content);
+        formData.append('message_type', 'outgoing');
+        formData.append('private', 'false');
+        formData.append('attachments[]', blob, 'file'); // 'file' name is arbitrary but needed
+        
+        body = formData;
+        // Do NOT set Content-Type header manually for FormData
+      } else {
+        // Send as JSON
+        headers['Content-Type'] = 'application/json';
+        body = JSON.stringify({
           content: msg.content,
           message_type: 'outgoing', 
           private: false 
-        })
+        });
+      }
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body
       });
 
       if (!response.ok) {
@@ -72,14 +94,15 @@ async function processScheduledMessages() {
       
       console.log(`[Worker] Mensagem ${msg.id} enviada com sucesso.`);
 
-    } catch (error: any) {
-      console.error(`[Worker] Falha ao enviar mensagem ${msg.id}:`, error.message);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(`[Worker] Falha ao enviar mensagem ${msg.id}:`, errorMessage);
       
       await prisma.scheduledMessage.update({
         where: { id: msg.id },
         data: { 
           status: 'FAILED',
-          errorLog: String(error.message).slice(0, 1000)
+          errorLog: errorMessage.slice(0, 1000)
         }
       });
     }

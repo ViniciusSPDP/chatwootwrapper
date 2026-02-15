@@ -127,6 +127,8 @@
     const params = new URLSearchParams({
       token: auth.token,
       accountId: auth.accountId,
+      client: auth.client, // ADICIONADO: client
+      uid: auth.uid,       // ADICIONADO: uid
       chatwootUrl: window.location.origin,
     });
 
