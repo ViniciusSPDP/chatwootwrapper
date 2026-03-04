@@ -22,12 +22,12 @@
       #saas-panel-overlay {
         position: fixed; top: 0; right: 0; bottom: 0; left: 0;
         background: rgba(0, 0, 0, 0.5); z-index: 9999;
-        display: none; justify-content: flex-end; /* Sidebar style */
+        display: none; justify-content: flex-end;
       }
       #saas-panel-overlay.visible { display: flex; }
       
       #saas-panel {
-        background: white; width: 500px; max-width: 100%; height: 100%;
+        background: white; width: 450px; max-width: 100%; height: 100%;
         box-shadow: -5px 0 15px rgba(0,0,0,0.1);
         display: flex; flex-direction: column;
         transform: translateX(100%); transition: transform 0.3s ease-out;
@@ -37,20 +37,30 @@
       #saas-iframe { flex: 1; border: none; width: 100%; height: 100%; }
       
       .saas-panel-header {
-        padding: 10px 15px; border-bottom: 1px solid #eee;
+        padding: 16px 20px; 
+        border-bottom: 1px solid #e5e7eb;
         display: flex; justify-content: space-between; align-items: center;
+        background: white;
+      }
+      .saas-panel-title {
+        margin: 0; font-size: 1.125rem; font-weight: 600; color: #111827;
+        font-family: inherit;
       }
       .saas-close-btn {
-        background: none; border: none; font-size: 20px; cursor: pointer; color: #555;
+        background: none; border: none; font-size: 24px; cursor: pointer; color: #6b7280;
+        display: flex; align-items: center; justify-content: center;
+        width: 32px; height: 32px; border-radius: 6px; transition: all 0.2s;
       }
+      .saas-close-btn:hover { background-color: #f3f4f6; color: #111827; }
       
-      /* Floating Widget Button */
-      #saas-floating-widget {
-        display: inline-flex; align-items: center; gap: 5px;
-        background: #10B981; color: white; border: none; padding: 6px 12px;
-        border-radius: 6px; margin-left: 8px; cursor: pointer; font-weight: 600;
-      }
-      #saas-floating-widget:hover { background: #059669; }
+      /* Dark Mode Support (Chatwoot usually adds .dark to body or html) */
+      .dark #saas-panel { background-color: #1f2937; }
+      .dark .saas-panel-header { background-color: #1f2937; border-bottom-color: #374151; }
+      .dark .saas-panel-title { color: #f9fafb; }
+      .dark .saas-close-btn { color: #9ca3af; }
+      .dark .saas-close-btn:hover { background-color: #374151; color: #f9fafb; }
+      
+
     `;
     document.head.appendChild(style);
   }
@@ -96,7 +106,7 @@
       <div id="saas-panel-overlay">
         <div id="saas-panel">
           <div class="saas-panel-header">
-            <h3 style="margin:0; font-size:16px;">SaaS Extension</h3>
+            <h3 class="saas-panel-title">Agendamento</h3>
             <button class="saas-close-btn" id="saas-panel-close">&times;</button>
           </div>
           <iframe id="saas-iframe" src="about:blank"></iframe>
@@ -122,8 +132,15 @@
       return;
     }
 
-    // Fetch Profile to get Account ID
-    let accountId = 1;
+    // 1. Tenta pegar o Account ID da URL (Mais confiável para o contexto atual)
+    let accountId = null;
+    const urlMatch = window.location.pathname.match(/\/app\/accounts\/(\d+)/);
+    if (urlMatch) {
+      accountId = urlMatch[1];
+      console.log('[SaaS Wrapper] Account ID detectado na URL:', accountId);
+    }
+
+    // 2. Fetch Profile (para validar token e obter fallback se necessário)
     try {
       const res = await fetch(`${BASE_URL}/api/v1/profile`, {
         headers: {
@@ -134,16 +151,20 @@
       });
       if (res.ok) {
         const data = await res.json();
-        if (data.accounts && data.accounts.length > 0) {
-          // Prefer the first active account or just the first one
-          accountId = data.accounts[0].id;
-        } else if (data.account_id) {
-          accountId = data.account_id;
+        if (!accountId) {
+          if (data.accounts && data.accounts.length > 0) {
+            accountId = data.accounts[0].id;
+          } else if (data.account_id) {
+            accountId = data.account_id;
+          }
         }
       }
     } catch (e) {
       console.error('[SaaS Wrapper] Failed to fetch profile:', e);
     }
+
+    // Fallback final
+    if (!accountId) accountId = 1;
 
     const conversationId = getConversationIdFromUrl();
 
@@ -243,9 +264,10 @@
 
   function initSidebar() {
     const iconSchedule = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path></svg>`;
-    const iconFollowup = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>`;
+    const iconCampaign = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>`;
 
     addSidebarItem(MENU_LABEL_SCHEDULE, iconSchedule, 'saas-schedule-btn', 'schedule');
+    addSidebarItem('Envio em Massa', iconCampaign, 'saas-campaign-btn', 'campaign');
 
   }
 
@@ -318,9 +340,20 @@
     // Copiar classes do irmão para parecer nativo
     if (siblingBtn) {
       btn.className = siblingBtn.className;
+      // Ajustes de espaçamento manuais para garantir que não fique colado ou cortado
+      btn.style.marginLeft = '8px';
+      btn.style.marginRight = '8px';
+
+      // Forçar bordas arredondadas (caso esteja herdando classe de grupo que remove borda)
+      btn.style.borderRadius = '8px';
+      // Remover arredondamentos parciais comuns em grupos (ex: rounded-r-md)
+      btn.style.borderTopLeftRadius = '8px';
+      btn.style.borderBottomLeftRadius = '8px';
+      btn.style.borderTopRightRadius = '8px';
+      btn.style.borderBottomRightRadius = '8px';
     } else {
       // Fallback de estilo se não tiver irmão (improvável se achou container)
-      btn.style.cssText = "display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 8px; cursor: pointer; color: inherit;";
+      btn.style.cssText = "display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 8px; cursor: pointer; color: inherit; margin-left: 8px; margin-right: 8px;";
     }
 
     // Ícone de Calendário

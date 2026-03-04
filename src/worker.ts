@@ -13,10 +13,15 @@ async function processScheduledMessages() {
       status: 'PENDING',
       scheduledAt: {
         lte: now // Menor ou igual a "agora"
-      }
+      },
+      OR: [
+        { campaignId: null },
+        { campaign: { status: 'RUNNING' } }
+      ]
     },
     include: {
-      tenant: true
+      tenant: true,
+      campaign: true
     }
   });
 
@@ -24,7 +29,13 @@ async function processScheduledMessages() {
   if (messages.length === 0) {
     // Vamos verificar se existe ALGUMA mensagem pendente, mesmo que seja para o futuro
     const anyPending = await prisma.scheduledMessage.findFirst({
-      where: { status: 'PENDING' },
+      where: { 
+        status: 'PENDING',
+        OR: [
+          { campaignId: null },
+          { campaign: { status: 'RUNNING' } }
+        ]
+      },
       orderBy: { scheduledAt: 'asc' }
     });
     
@@ -42,15 +53,62 @@ async function processScheduledMessages() {
       console.log(`[Worker] Enviando MSG ID: ${msg.id} | Agendada para: ${msg.scheduledAt.toISOString()}`);
       
       const { tenant } = msg;
-
-      const url = `${tenant.chatwootUrl}/api/v1/accounts/${tenant.accountId}/conversations/${msg.conversationId}/messages`;
       
-      let body: string | FormData;
       const headers: Record<string, string> = {
         'access-token': tenant.apiAccessToken, // FIXED: header name must be 'access-token'
         'client': tenant.client || '',
         'uid': tenant.uid || '',
       };
+
+      let conversationId = msg.conversationId;
+
+      if (!conversationId && msg.contactId && msg.inboxId) {
+        console.log(`[Worker] Criando conversa para o contato ${msg.contactId}`);
+        const createConvUrl = `${tenant.chatwootUrl}/api/v1/accounts/${tenant.accountId}/conversations`;
+        
+        try {
+          const convRes = await fetch(createConvUrl, {
+            method: 'POST',
+            headers: {
+              ...headers,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              inbox_id: msg.inboxId,
+              contact_id: String(msg.contactId),
+              status: "open"
+            })
+          });
+
+          if (!convRes.ok) {
+             const errText = await convRes.text();
+             throw new Error(`Failed to create conversation: ${convRes.status} - ${errText}`);
+          }
+          
+          const convData = await convRes.json();
+          conversationId = convData.id || (convData.payload && convData.payload.id);
+          
+          if (!conversationId) {
+              throw new Error('Não foi possível obter o ID da conversa criada.');
+          }
+
+          await prisma.scheduledMessage.update({
+            where: { id: msg.id },
+            data: { conversationId }
+          });
+        } catch (convErr) {
+            console.error(`[Worker] Erro ao criar conversa:`, convErr);
+            throw convErr; // Interrompe e vai pro catch principal do loop
+        }
+      }
+
+      if (!conversationId) {
+         throw new Error('Sem conversationId e sem dados para criar uma nova.');
+      }
+
+      const url = `${tenant.chatwootUrl}/api/v1/accounts/${tenant.accountId}/conversations/${conversationId}/messages`;
+      
+      let body: string | FormData;
 
       if (msg.attachmentUrl) {
         // Prepare FormData for attachment
@@ -91,6 +149,13 @@ async function processScheduledMessages() {
         where: { id: msg.id },
         data: { status: 'SENT', errorLog: null }
       });
+
+      if (msg.campaignId) {
+        await prisma.campaign.update({
+          where: { id: msg.campaignId },
+          data: { sentCount: { increment: 1 } }
+        });
+      }
       
       console.log(`[Worker] Mensagem ${msg.id} enviada com sucesso.`);
 
