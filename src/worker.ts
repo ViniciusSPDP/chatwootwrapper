@@ -22,6 +22,9 @@ async function processScheduledMessages() {
     include: {
       tenant: true,
       campaign: true
+    },
+    orderBy: {
+      scheduledAt: 'asc'
     }
   });
 
@@ -162,6 +165,28 @@ async function processScheduledMessages() {
             data: { status: 'COMPLETED' }
           });
           console.log(`[Worker] Campanha ${updatedCampaign.id} finalizada (COMPLETED).`);
+        } else {
+          // Check if 50 contacts were sent today
+          const startOfDay = new Date();
+          startOfDay.setHours(0, 0, 0, 0);
+
+          const sentToday = await prisma.scheduledMessage.findMany({
+             where: {
+                 status: 'COMPLETED',
+                 campaignId: msg.campaignId,
+                 scheduledAt: { gte: startOfDay }
+             },
+             select: { conversationId: true },
+             distinct: ['conversationId']
+          });
+
+          if (sentToday.length >= 50) {
+             await prisma.campaign.update({
+                where: { id: msg.campaignId },
+                data: { status: 'PAUSED' }
+             });
+             console.log(`[Worker] Limite de 50 contatos/dia atingido. Campanha ${msg.campaignId} pausada.`);
+          }
         }
       }
       
@@ -194,14 +219,14 @@ async function startWorker() {
     console.error('[Worker] Erro crítico na execução inicial:', err);
   });
 
-  // Agenda para cada 60 segundos
+  // Agenda para cada 10 segundos
   setInterval(async () => {
     try {
       await processScheduledMessages();
     } catch (err) {
       console.error('[Worker] Erro no loop de intervalo:', err);
     }
-  }, 60000);
+  }, 10000);
 }
 
 // Inicia o processo

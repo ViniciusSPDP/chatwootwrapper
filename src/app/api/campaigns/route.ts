@@ -109,18 +109,12 @@ export async function POST(request: Request) {
 
     console.log(`Encontradas ${conversations.length} conversas para a etiqueta "${label}".`);
 
-    // 4. Calcular os agendamentos respeitando o delay randômico e limite diário
+    // 4. Calcular os agendamentos respeitando o delay randômico entre os contatos
     let lastTime = new Date();
-    const maxPerDay = 50;
     const scheduledMessages = [];
 
     for (let i = 0; i < conversations.length; i++) {
         const conversation = conversations[i];
-
-        // Strict Limit: Lote de 50 contatos por dia. Se ultrapassar, joga o "lastTime" para +24h
-        if (i > 0 && i % maxPerDay === 0) {
-            lastTime.setDate(lastTime.getDate() + 1);
-        }
 
         // 1º Delay Randômico (Entre Contatos) 
         const randomDelayMinutes = Math.floor(Math.random() * (maxDelay - minDelay + 1)) + minDelay;

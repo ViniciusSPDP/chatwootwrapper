@@ -257,7 +257,7 @@ function CampaignContent() {
                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                           Atraso antes desta etapa (Segundos)
                        </label>
-                       <input type="number" min="0" className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg outline-none bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100" 
+                       <input type="number" min="10" className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg outline-none bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100" 
                         value={step.delaySeconds} 
                         onChange={e => {
                           const newSteps = [...steps];
@@ -265,7 +265,7 @@ function CampaignContent() {
                           setSteps(newSteps);
                         }} 
                        />
-                       <p className="text-xs text-slate-500 mt-1">Tempo de espera após o passo anterior. (0 para envio imediato na sequência).</p>
+                       <p className="text-xs text-slate-500 mt-1">Tempo de espera após o passo anterior (Mínimo recomendado de 10 segundos).</p>
                     </div>
                   </div>
 
