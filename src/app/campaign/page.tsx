@@ -19,6 +19,14 @@ function CampaignContent() {
   const [loading, setLoading] = useState(true);
   const [loadingSubmit, setLoadingSubmit] = useState(false);
 
+  // Toast State
+  const [toast, setToast] = useState<{message: string, type: 'success' | 'error'} | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'error') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3500);
+  };
+
   // Apply theme class to document element on mount
   useEffect(() => {
     if (theme === 'dark') {
@@ -32,9 +40,13 @@ function CampaignContent() {
   const [name, setName] = useState('');
   const [selectedLabel, setSelectedLabel] = useState('');
   const [selectedInbox, setSelectedInbox] = useState('');
-  const [message, setMessage] = useState('');
   const [minDelay, setMinDelay] = useState(3);
   const [maxDelay, setMaxDelay] = useState(15);
+
+  // Flow State
+  const [steps, setSteps] = useState<any[]>([
+    { id: Date.now().toString(), type: 'text', content: '', delaySeconds: 0 }
+  ]);
 
   useEffect(() => {
     if (!accountId || !token || !chatwootUrl) return;
@@ -88,13 +100,19 @@ function CampaignContent() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !selectedLabel || !selectedInbox || !message) {
-      alert("Preencha todos os campos obrigatórios");
+    if (!name || !selectedLabel || !selectedInbox || steps.length === 0) {
+      showToast("Preencha todos os campos obrigatórios", "error");
+      return;
+    }
+
+    // Valida se todas as etapas possuem conteúdo
+    if (steps.some(step => !step.content.trim())) {
+      showToast("Todas as etapas do fluxo devem ter conteúdo ou URLs.", "error");
       return;
     }
 
     if (minDelay > maxDelay) {
-      alert("Delay mínimo não pode ser maior que o máximo");
+      showToast("O Delay Mínimo geral não pode ser maior que o Máximo.", "error");
       return;
     }
 
@@ -107,7 +125,7 @@ function CampaignContent() {
           name,
           label: selectedLabel,
           inboxId: selectedInbox,
-          message,
+          steps: steps.map(({ type, content, delaySeconds }) => ({ type, content, delaySeconds: Number(delaySeconds) })),
           minDelay: Number(minDelay),
           maxDelay: Number(maxDelay),
           chatwootUrl,
@@ -121,12 +139,12 @@ function CampaignContent() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erro desconhecido');
 
-      alert(`Campanha criada com sucesso! ${data.scheduledCount} mensagens agendadas.`);
+      showToast(`Campanha criada com sucesso! ${data.scheduledCount} mensagens agendadas.`, "success");
       setName('');
-      setMessage('');
+      setSteps([{ id: Date.now().toString(), type: 'text', content: '', delaySeconds: 0 }]);
       fetchCampaigns();
     } catch (err: any) {
-      alert(`Erro: ${err.message}`);
+      showToast(`Erro: ${err.message}`, "error");
     } finally {
       setLoadingSubmit(false);
     }
@@ -142,7 +160,7 @@ function CampaignContent() {
       if (!res.ok) throw new Error('Falha ao atualizar');
       fetchCampaigns();
     } catch (err: any) {
-      alert(`Erro: ${err.message}`);
+      showToast(`Erro: ${err.message}`, "error");
     }
   };
 
@@ -188,23 +206,86 @@ function CampaignContent() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-6">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Delay Mínimo (Minutos)</label>
-                <input required type="number" min="1" className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100" value={minDelay} onChange={e => setMinDelay(Number(e.target.value))} />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Delay Máximo (Minutos)</label>
-                <input required type="number" min="1" className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100" value={maxDelay} onChange={e => setMaxDelay(Number(e.target.value))} />
-              </div>
+            <h3 className="text-lg font-medium text-slate-800 dark:text-slate-200 mt-8 mb-4 border-b border-slate-200 dark:border-slate-700 pb-2">
+               Fluxo de Mensagens
+               <span className="block text-xs font-normal text-slate-500 mt-1">Configure as etapas que cada contato receberá sucessivamente.</span>
+            </h3>
+
+            <div className="space-y-4">
+              {steps.map((step, index) => (
+                <div key={step.id} className="p-5 border border-slate-300 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-800/50 relative">
+                  <div className="flex justify-between items-center mb-4">
+                    <span className="font-semibold text-sm bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 px-2 py-1 rounded">Etapa {index + 1}</span>
+                    {steps.length > 1 && (
+                      <button type="button" onClick={() => setSteps(steps.filter(s => s.id !== step.id))} className="text-red-500 hover:text-red-700 transition text-sm font-medium">
+                         Remover
+                      </button>
+                    )}
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Tipo de Envio</label>
+                      <select className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg outline-none bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100" 
+                        value={step.type} 
+                        onChange={e => {
+                          const newSteps = [...steps];
+                          newSteps[index].type = e.target.value;
+                          setSteps(newSteps);
+                        }}
+                      >
+                        <option value="text">Texto</option>
+                        <option value="image">Imagem</option>
+                        <option value="audio">Áudio</option>
+                        <option value="video">Vídeo</option>
+                        <option value="document">Documento</option>
+                      </select>
+                    </div>
+                    
+                    <div className="md:col-span-2">
+                       <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                          Atraso antes desta etapa (Segundos)
+                       </label>
+                       <input type="number" min="0" className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg outline-none bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100" 
+                        value={step.delaySeconds} 
+                        onChange={e => {
+                          const newSteps = [...steps];
+                          newSteps[index].delaySeconds = Number(e.target.value);
+                          setSteps(newSteps);
+                        }} 
+                       />
+                       <p className="text-xs text-slate-500 mt-1">Tempo de espera após o passo anterior. (0 para envio imediato na sequência).</p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                       {step.type === 'text' ? 'Mensagem de Texto' : 'URLs de Mídia'}
+                    </label>
+                    <textarea required rows={4} className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-mono text-sm" 
+                      placeholder={step.type === 'text' 
+                        ? "Olá {João|Maria}, tudo {bem|joia}? Gostaria de falar sobre {nosso produto|nossa oferta}." 
+                        : "https://minio.com/banner-a.jpg\nhttps://minio.com/banner-b.jpg\n(Insira uma URL por linha. O sistema irá sortear uma aleatoriamente por contato)"} 
+                      value={step.content} 
+                      onChange={e => {
+                        const newSteps = [...steps];
+                        newSteps[index].content = e.target.value;
+                        setSteps(newSteps);
+                      }}></textarea>
+                      {step.type === 'text' && (
+                        <p className="text-xs text-slate-500 mt-1">Suporta Spintax <code>{'{Opção A|Opção B}'}</code> para rotacionar variações.</p>
+                      )}
+                  </div>
+                </div>
+              ))}
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Mensagem</label>
-              <textarea required rows={4} className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100" placeholder="Olá {{nome}}, temos uma novidade..." value={message} onChange={e => setMessage(e.target.value)}></textarea>
-            </div>
+            <button type="button" onClick={() => setSteps([...steps, { id: Date.now().toString(), type: 'text', content: '', delaySeconds: 5 }])} className="w-full border-2 border-dashed border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:border-slate-400 dark:hover:border-slate-500 py-3 rounded-lg font-medium transition flex justify-center items-center gap-2">
+               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4"></path></svg>
+               Adicionar Etapa ao Fluxo
+            </button>
 
-            <button type="submit" disabled={loadingSubmit} className="w-full bg-[#1f93ff] hover:bg-blue-600 active:bg-blue-700 text-white font-medium py-3 rounded-lg transition disabled:opacity-75 disabled:cursor-wait mt-4 inline-flex justify-center items-center shadow-sm">
+            <button type="submit" disabled={loadingSubmit} className="w-full bg-[#1f93ff] hover:bg-blue-600 active:bg-blue-700 text-white font-medium py-3 rounded-lg transition disabled:opacity-75 disabled:cursor-wait mt-6 inline-flex justify-center items-center shadow-sm">
               {loadingSubmit ? (
                 <span className="flex items-center gap-2">
                    <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -268,6 +349,25 @@ function CampaignContent() {
             </div>
           )}
         </div>
+
+        {/* Toast Notification */}
+        {toast && (
+          <div className={`fixed bottom-4 right-4 max-w-sm w-full p-4 rounded-xl shadow-lg border transform transition-all duration-300 z-50 flex items-start gap-3 ${
+            toast.type === 'success' 
+              ? 'bg-green-50 border-green-200 text-green-800 dark:bg-green-900/40 dark:border-green-800 dark:text-green-300' 
+              : 'bg-red-50 border-red-200 text-red-800 dark:bg-red-900/40 dark:border-red-800 dark:text-red-300'
+          }`}>
+             {toast.type === 'success' ? (
+               <svg className="w-5 h-5 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg>
+             ) : (
+               <svg className="w-5 h-5 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+             )}
+             <p className="font-medium text-sm flex-1">{toast.message}</p>
+             <button onClick={() => setToast(null)} className="opacity-70 hover:opacity-100 transition focus:outline-none">
+               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+             </button>
+          </div>
+        )}
 
       </div>
     </div>

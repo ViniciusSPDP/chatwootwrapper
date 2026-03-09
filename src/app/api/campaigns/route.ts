@@ -9,7 +9,7 @@ export async function POST(request: Request) {
       name,
       label,
       inboxId,
-      message,
+      steps, // Agora será um array de etapas { type, content, delaySeconds }
       minDelay,
       maxDelay,
       chatwootUrl,
@@ -19,9 +19,31 @@ export async function POST(request: Request) {
       uid
     } = body;
 
-    if (!name || !label || !inboxId || !message || minDelay == null || maxDelay == null || !chatwootUrl || !token) {
+    if (!name || !label || !inboxId || !steps || !steps.length || minDelay == null || maxDelay == null || !chatwootUrl || !token) {
       return NextResponse.json({ error: 'Dados incompletos' }, { status: 400 });
     }
+
+    // Utilitário para Spintax de Texto (recursivo simples) {a|b|c}
+    const parseSpintax = (text: string): string => {
+      let result = text || "";
+      const regex = /\{([^{}]+)\}/g;
+      let match;
+      while ((match = regex.exec(result)) !== null) {
+        const options = match[1].split('|');
+        const replacement = options[Math.floor(Math.random() * options.length)];
+        result = result.substring(0, match.index) + replacement + result.substring(match.index + match[0].length);
+        regex.lastIndex = 0; // Reinicia a regex para capturar aninhados ou os próximos
+      }
+      return result;
+    };
+
+    // Utilitário para mídias: pega URLs separadas por quebra de linha ou vírgulas e escolhe uma aleatória
+    const parseMediaSpintax = (content: string): string | null => {
+      if (!content) return null;
+      const urls = content.split(/[\n,]+/).map(u => u.trim()).filter(Boolean);
+      if (urls.length === 0) return null;
+      return urls[Math.floor(Math.random() * urls.length)];
+    };
 
     console.log(`🚀 Iniciando criação da campanha "${name}" para a etiqueta "${label}"...`);
 
@@ -87,51 +109,69 @@ export async function POST(request: Request) {
 
     console.log(`Encontradas ${conversations.length} conversas para a etiqueta "${label}".`);
 
-    // 3. Criar a Campanha
-    const campaign = await prisma.campaign.create({
-      data: {
-        name: name,
-        tenantId: tenant.id,
-        totalContacts: conversations.length,
-        status: 'RUNNING',
-      }
-    });
-
     // 4. Calcular os agendamentos respeitando o delay randômico e limite diário
     let lastTime = new Date();
-    // Adiciona o primeiro delay imediatamente para a primeira mensagem
-    // lastTime continuará sendo incrementado
     const maxPerDay = 50;
-
     const scheduledMessages = [];
 
     for (let i = 0; i < conversations.length; i++) {
         const conversation = conversations[i];
 
-        // Se excedeu 50 no dia, pula 24 horas a partir do horário da última mensagem
+        // Strict Limit: Lote de 50 contatos por dia. Se ultrapassar, joga o "lastTime" para +24h
         if (i > 0 && i % maxPerDay === 0) {
             lastTime.setDate(lastTime.getDate() + 1);
         }
 
-        // Delay randômico entre minDelay e maxDelay (em minutos)
+        // 1º Delay Randômico (Entre Contatos) 
         const randomDelayMinutes = Math.floor(Math.random() * (maxDelay - minDelay + 1)) + minDelay;
         lastTime = new Date(lastTime.getTime() + randomDelayMinutes * 60000);
+        
+        let currentStepTime = new Date(lastTime);
 
-        scheduledMessages.push({
-            content: message,
-            scheduledAt: new Date(lastTime),
-            status: 'PENDING',
-            tenantId: tenant.id,
-            campaignId: campaign.id,
-            contactId: conversation.meta?.sender?.id || null, // opcional agora que usaremos conversationId
-            inboxId: conversation.inbox_id || Number(inboxId),
-            conversationId: conversation.id,
-        });
+        // Processa cada etapa configurada para ESTE contato
+        for (const step of steps) {
+            // Conta o Delay individual dessa etapa (em segundos) - se não tiver, é 0 aguardando o próximo "tick" do worker
+            currentStepTime = new Date(currentStepTime.getTime() + (step.delaySeconds || 0) * 1000);
+
+            let spunContent = "";
+            let attachmentUrl = null;
+
+            if (step.type === 'text') {
+               spunContent = parseSpintax(step.content);
+            } else {
+               // Para os outros (audio, image, document) usaremos o Array the URLs
+               attachmentUrl = parseMediaSpintax(step.content);
+            }
+
+            scheduledMessages.push({
+                content: spunContent,
+                attachmentUrl: attachmentUrl || null,
+                scheduledAt: new Date(currentStepTime),
+                status: 'PENDING',
+                tenantId: tenant.id,
+                contactId: conversation.meta?.sender?.id || null, // fallback
+                inboxId: conversation.inbox_id || Number(inboxId),
+                conversationId: conversation.id,
+            });
+        }
     }
 
-    // Usando createMany para otimizar
+    // 3. Criar a Campanha com o Total de Mensagens (e não só de contatos, pro progresso não bugar)
+    const campaign = await prisma.campaign.create({
+      data: {
+        name: name,
+        tenantId: tenant.id,
+        totalContacts: scheduledMessages.length, // Usamos quantity real para o worker preencher certinho
+        status: 'RUNNING',
+      }
+    });
+
+    // Assinar a CampaignId recém criada no Array final
+    const finalMessages = scheduledMessages.map(msg => ({ ...msg, campaignId: campaign.id }));
+
+    // Usando createMany para otimizar a inserção
     await prisma.scheduledMessage.createMany({
-        data: scheduledMessages
+        data: finalMessages
     });
 
     return NextResponse.json({
