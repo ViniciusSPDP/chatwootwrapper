@@ -45,7 +45,7 @@ function CampaignContent() {
 
   // Flow State
   const [steps, setSteps] = useState<any[]>([
-    { id: Date.now().toString(), type: 'text', content: '', delaySeconds: 0 }
+    { id: Date.now().toString(), type: 'text', content: '', delaySeconds: 10 }
   ]);
 
   useEffect(() => {
@@ -141,7 +141,7 @@ function CampaignContent() {
 
       showToast(`Campanha criada com sucesso! ${data.scheduledCount} mensagens agendadas.`, "success");
       setName('');
-      setSteps([{ id: Date.now().toString(), type: 'text', content: '', delaySeconds: 0 }]);
+      setSteps([{ id: Date.now().toString(), type: 'text', content: '', delaySeconds: 10 }]);
       fetchCampaigns();
     } catch (err: any) {
       showToast(`Erro: ${err.message}`, "error");
@@ -291,7 +291,7 @@ function CampaignContent() {
               ))}
             </div>
 
-            <button type="button" onClick={() => setSteps([...steps, { id: Date.now().toString(), type: 'text', content: '', delaySeconds: 5 }])} className="w-full border-2 border-dashed border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:border-slate-400 dark:hover:border-slate-500 py-3 rounded-lg font-medium transition flex justify-center items-center gap-2">
+            <button type="button" onClick={() => setSteps([...steps, { id: Date.now().toString(), type: 'text', content: '', delaySeconds: 10 }])} className="w-full border-2 border-dashed border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:border-slate-400 dark:hover:border-slate-500 py-3 rounded-lg font-medium transition flex justify-center items-center gap-2">
                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4"></path></svg>
                Adicionar Etapa ao Fluxo
             </button>
