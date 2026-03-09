@@ -206,6 +206,17 @@ function CampaignContent() {
               </div>
             </div>
 
+            <div className="grid grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Delay Mínimo (Minutos) - Entre Contatos</label>
+                <input required type="number" min="1" className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100" value={minDelay} onChange={e => setMinDelay(Number(e.target.value))} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Delay Máximo (Minutos) - Entre Contatos</label>
+                <input required type="number" min="1" className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100" value={maxDelay} onChange={e => setMaxDelay(Number(e.target.value))} />
+              </div>
+            </div>
+
             <h3 className="text-lg font-medium text-slate-800 dark:text-slate-200 mt-8 mb-4 border-b border-slate-200 dark:border-slate-700 pb-2">
                Fluxo de Mensagens
                <span className="block text-xs font-normal text-slate-500 mt-1">Configure as etapas que cada contato receberá sucessivamente.</span>
