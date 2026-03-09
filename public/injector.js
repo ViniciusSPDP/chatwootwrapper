@@ -30,9 +30,16 @@
         background: white; width: 450px; max-width: 100%; height: 100%;
         box-shadow: -5px 0 15px rgba(0,0,0,0.1);
         display: flex; flex-direction: column;
-        transform: translateX(100%); transition: transform 0.3s ease-out;
+        transform: translateX(100%); transition: transform 0.3s ease-out, width 0.3s ease-out;
       }
       #saas-panel-overlay.visible #saas-panel { transform: translateX(0); }
+
+      /* Fullscreen mode (leaving sidebar space) */
+      #saas-panel-overlay.fullscreen #saas-panel {
+        width: calc(100vw - 260px); /* fallback sidebar width */
+        left: 260px;
+        position: absolute;
+      }
 
       #saas-iframe { flex: 1; border: none; width: 100%; height: 100%; }
       
@@ -96,6 +103,14 @@
     return match ? parseInt(match[1], 10) : null;
   }
 
+  function getSidebarWidth() {
+    var aside = document.querySelector('aside.bg-n-solid-2, aside[class*="bg-n-solid"], aside.border-r, aside');
+    if (aside) {
+      return aside.getBoundingClientRect().right;
+    }
+    return 260; // default fallback
+  }
+
   // ============================================================
   // 3. PAINEL (IFRAME)
   // ============================================================
@@ -121,16 +136,37 @@
     };
   }
 
-  async function openPanel(page) {
+  async function openPanel(page, isFullScreen = false) {
     createPanel();
     const overlay = document.getElementById('saas-panel-overlay');
     const iframe = document.getElementById('saas-iframe');
+    const panel = document.getElementById('saas-panel');
     const auth = getAuthFromCookie();
 
     if (!auth) {
       alert('Authentication error (Cookie not found)');
       return;
     }
+
+    // Handle Title and Layout
+    const headerTitle = document.querySelector('.saas-panel-title');
+    if (headerTitle) {
+      headerTitle.textContent = page === 'campaign' ? 'Envio em Massa' : 'Agendamento';
+    }
+
+    if (isFullScreen) {
+      overlay.classList.add('fullscreen');
+      const sidebarWidth = getSidebarWidth();
+      panel.style.width = `calc(100vw - ${sidebarWidth}px)`;
+      panel.style.left = `${sidebarWidth}px`;
+    } else {
+      overlay.classList.remove('fullscreen');
+      panel.style.width = '';
+      panel.style.left = '';
+    }
+
+    // Check Dark Mode
+    const isDark = document.documentElement.classList.contains('dark') || document.body.classList.contains('dark');
 
     // 1. Tenta pegar o Account ID da URL (Mais confiável para o contexto atual)
     let accountId = null;
@@ -175,6 +211,7 @@
       client: auth.client,
       uid: auth.uid,
       chatwootUrl: window.location.origin,
+      theme: isDark ? 'dark' : 'light'
     });
 
     if (conversationId) {
@@ -248,7 +285,8 @@
 
     item.onclick = (e) => {
       e.preventDefault();
-      openPanel(page);
+      // Pass isFullScreen true if page is 'campaign'
+      openPanel(page, page === 'campaign');
     };
 
     li.appendChild(item);

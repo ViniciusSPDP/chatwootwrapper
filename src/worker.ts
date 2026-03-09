@@ -147,14 +147,22 @@ async function processScheduledMessages() {
 
       await prisma.scheduledMessage.update({
         where: { id: msg.id },
-        data: { status: 'SENT', errorLog: null }
+        data: { status: 'COMPLETED', errorLog: null }
       });
 
       if (msg.campaignId) {
-        await prisma.campaign.update({
+        const updatedCampaign = await prisma.campaign.update({
           where: { id: msg.campaignId },
           data: { sentCount: { increment: 1 } }
         });
+
+        if (updatedCampaign.sentCount >= updatedCampaign.totalContacts) {
+          await prisma.campaign.update({
+            where: { id: msg.campaignId },
+            data: { status: 'COMPLETED' }
+          });
+          console.log(`[Worker] Campanha ${updatedCampaign.id} finalizada (COMPLETED).`);
+        }
       }
       
       console.log(`[Worker] Mensagem ${msg.id} enviada com sucesso.`);

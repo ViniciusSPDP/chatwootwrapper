@@ -47,9 +47,15 @@ export async function POST(request: Request) {
       }
     });
 
-    // 2. Buscar contatos com a etiqueta
-    const contactsUrl = `${chatwootUrl}/api/v1/accounts/${accountId}/contacts?labels=${encodeURIComponent(label)}`;
-    const contactsRes = await fetch(contactsUrl, {
+    // 2. Buscar conversas com a etiqueta
+    // O endpoint deve trazer as conversas do accountId filtradas pela tag.
+    // Usando endpoint padrão do Chatwoot para buscar conversas e filtrando por label
+    let allConversations: any[] = [];
+    let page = 1;
+
+    // TODO: Verify if the /conversations?labels= works for this chatwoot version or use general search
+    const conversationsUrl = `${chatwootUrl}/api/v1/accounts/${accountId}/conversations?labels=${encodeURIComponent(label)}&status=all`;
+    const conversationsRes = await fetch(conversationsUrl, {
       headers: {
         'access-token': token,
         'client': client || '',
@@ -57,27 +63,36 @@ export async function POST(request: Request) {
       }
     });
 
-    if (!contactsRes.ok) {
-      const errText = await contactsRes.text();
-      console.error('Chatwoot error fetch contacts:', errText);
-      throw new Error(`Falha ao buscar contatos: ${contactsRes.status}`);
+    if (!conversationsRes.ok) {
+      const errText = await conversationsRes.text();
+      console.error('Chatwoot error fetch conversations:', errText);
+      throw new Error(`Falha ao buscar conversas: ${conversationsRes.status}`);
     }
 
-    const contactsData = await contactsRes.json();
-    const contacts = contactsData.payload || contactsData;
-
-    if (!contacts || contacts.length === 0) {
-      return NextResponse.json({ error: 'Nenhum contato encontrado com essa etiqueta' }, { status: 404 });
+    const conversationsData = await conversationsRes.json();
+    let conversations = conversationsData.payload || conversationsData.data || conversationsData;
+    
+    // Tratativa para payload.conversations ou array direto
+    if (conversationsData.data && conversationsData.data.payload) {
+        conversations = conversationsData.data.payload;
     }
 
-    console.log(`Encontrados ${contacts.length} contatos para a etiqueta "${label}".`);
+    if (!Array.isArray(conversations)) {
+        conversations = [];
+    }
+
+    if (conversations.length === 0) {
+      return NextResponse.json({ error: 'Nenhuma conversa encontrada com essa etiqueta' }, { status: 404 });
+    }
+
+    console.log(`Encontradas ${conversations.length} conversas para a etiqueta "${label}".`);
 
     // 3. Criar a Campanha
     const campaign = await prisma.campaign.create({
       data: {
         name: name,
         tenantId: tenant.id,
-        totalContacts: contacts.length,
+        totalContacts: conversations.length,
         status: 'RUNNING',
       }
     });
@@ -90,8 +105,8 @@ export async function POST(request: Request) {
 
     const scheduledMessages = [];
 
-    for (let i = 0; i < contacts.length; i++) {
-        const contact = contacts[i];
+    for (let i = 0; i < conversations.length; i++) {
+        const conversation = conversations[i];
 
         // Se excedeu 50 no dia, pula 24 horas a partir do horário da última mensagem
         if (i > 0 && i % maxPerDay === 0) {
@@ -108,9 +123,9 @@ export async function POST(request: Request) {
             status: 'PENDING',
             tenantId: tenant.id,
             campaignId: campaign.id,
-            contactId: contact.id,
-            inboxId: Number(inboxId),
-            // conversationId é nulo por enquanto. O Worker criará a conversa se não existir.
+            contactId: conversation.meta?.sender?.id || null, // opcional agora que usaremos conversationId
+            inboxId: conversation.inbox_id || Number(inboxId),
+            conversationId: conversation.id,
         });
     }
 
