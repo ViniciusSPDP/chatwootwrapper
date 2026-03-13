@@ -70,7 +70,8 @@ async function processScheduledMessages() {
         const createConvUrl = `${tenant.chatwootUrl}/api/v1/accounts/${tenant.accountId}/conversations`;
         
         try {
-          const convRes = await fetch(createConvUrl, {
+          // Usando fetchWithTimeout (15s limite)
+          const convRes = await fetchWithTimeout(createConvUrl, {
             method: 'POST',
             headers: {
               ...headers,
@@ -115,7 +116,7 @@ async function processScheduledMessages() {
 
       if (msg.attachmentUrl) {
         // Prepare FormData for attachment
-        const attachmentRes = await fetch(msg.attachmentUrl);
+        const attachmentRes = await fetchWithTimeout(msg.attachmentUrl);
         if (!attachmentRes.ok) throw new Error(`Failed to fetch attachment: ${attachmentRes.statusText}`);
         const blob = await attachmentRes.blob();
         
@@ -137,7 +138,7 @@ async function processScheduledMessages() {
         });
       }
       
-      const response = await fetch(url, {
+      const response = await fetchWithTimeout(url, {
         method: 'POST',
         headers,
         body
@@ -207,6 +208,30 @@ async function processScheduledMessages() {
   }
 }
 
+async function fetchWithTimeout(url: string, options: RequestInit = {}, timeout = 15000) {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeout);
+  try {
+    const response = await fetch(url, { ...options, signal: controller.signal });
+    clearTimeout(id);
+    return response;
+  } catch (error) {
+    clearTimeout(id);
+    throw error;
+  }
+}
+
+async function runWorkerLoop() {
+  try {
+    await processScheduledMessages();
+  } catch (err) {
+    console.error('[Worker] Erro no loop de intervalo:', err);
+  } finally {
+    // Agenda para daqui a 10s APÓS o ciclo atual (sucesso ou falha) terminar
+    setTimeout(runWorkerLoop, 10000);
+  }
+}
+
 async function startWorker() {
   // Garantir que o log de início apareça
   console.log('==============================================');
@@ -214,19 +239,8 @@ async function startWorker() {
   console.log(`[Worker] Hora atual do servidor: ${new Date().toISOString()}`);
   console.log('==============================================');
   
-  // Executa imediatamente
-  await processScheduledMessages().catch(err => {
-    console.error('[Worker] Erro crítico na execução inicial:', err);
-  });
-
-  // Agenda para cada 10 segundos
-  setInterval(async () => {
-    try {
-      await processScheduledMessages();
-    } catch (err) {
-      console.error('[Worker] Erro no loop de intervalo:', err);
-    }
-  }, 10000);
+  // Inicia o processo recursivo que aguarda a conclusão antes de reiniciar
+  runWorkerLoop();
 }
 
 // Inicia o processo
