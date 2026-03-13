@@ -151,7 +151,7 @@ async function processScheduledMessages() {
 
       await prisma.scheduledMessage.update({
         where: { id: msg.id },
-        data: { status: 'COMPLETED', errorLog: null }
+        data: { status: 'SENT', errorLog: null }
       });
 
       if (msg.campaignId) {
@@ -173,7 +173,7 @@ async function processScheduledMessages() {
 
           const sentToday = await prisma.scheduledMessage.findMany({
              where: {
-                 status: 'COMPLETED',
+                 status: 'SENT',
                  campaignId: msg.campaignId,
                  scheduledAt: { gte: startOfDay }
              },
