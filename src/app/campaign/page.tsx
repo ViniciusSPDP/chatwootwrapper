@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, Suspense, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 
 function CampaignContent() {
@@ -47,6 +47,55 @@ function CampaignContent() {
   const [steps, setSteps] = useState<any[]>([
     { id: Date.now().toString(), type: 'text', content: '', delaySeconds: 10 }
   ]);
+
+  // Upload State
+  const [uploadingStepId, setUploadingStepId] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleUploadClick = (stepId: string) => {
+    setUploadingStepId(stepId);
+    fileInputRef.current?.click();
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!uploadingStepId) return;
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const formData = new FormData();
+    Array.from(files).forEach((file) => {
+      formData.append('files', file);
+    });
+
+    try {
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await res.json();
+      
+      if (data.success && data.urls) {
+        setSteps(prevSteps => prevSteps.map(step => {
+          if (step.id === uploadingStepId) {
+            const newText = data.urls.join('\n');
+            return {
+              ...step,
+              content: step.content ? `${step.content}\n${newText}` : newText
+            };
+          }
+          return step;
+        }));
+        showToast('Upload realizado com sucesso!', 'success');
+      } else {
+        showToast(data.error || 'Falha no upload', 'error');
+      }
+    } catch (err) {
+      showToast('Erro ao realizar upload das mídias', 'error');
+    } finally {
+      setUploadingStepId(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
 
   useEffect(() => {
     if (!accountId || !token || !chatwootUrl) return;
@@ -180,6 +229,13 @@ function CampaignContent() {
              Nova Campanha
           </h2>
           <form onSubmit={handleSubmit} className="space-y-6">
+             <input 
+               type="file" 
+               multiple 
+               className="hidden" 
+               ref={fileInputRef} 
+               onChange={handleFileUpload} 
+             />
             <div>
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Nome da Ação</label>
               <input required type="text" className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100" placeholder="Ex: Campanha Black Friday" value={name} onChange={e => setName(e.target.value)} />
@@ -270,9 +326,19 @@ function CampaignContent() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                       {step.type === 'text' ? 'Mensagem de Texto' : 'URLs de Mídia'}
-                    </label>
+                    <div className="flex justify-between items-center mb-1">
+                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                         {step.type === 'text' ? 'Mensagem de Texto' : 'URLs de Mídia'}
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => handleUploadClick(step.id)}
+                        disabled={uploadingStepId === step.id}
+                        className="text-xs font-medium px-2 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 disabled:opacity-50 dark:bg-blue-900/30 dark:text-blue-400 dark:hover:bg-blue-900/50 rounded-md flex items-center gap-1 transition-colors"
+                      >
+                        {uploadingStepId === step.id ? '⏳ Enviando...' : '📎 Upload MinIO'}
+                      </button>
+                    </div>
                     <textarea required rows={4} className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-mono text-sm" 
                       placeholder={step.type === 'text' 
                         ? "Olá {João|Maria}, tudo {bem|joia}? Gostaria de falar sobre {nosso produto|nossa oferta}." 

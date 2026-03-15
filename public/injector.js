@@ -1,7 +1,7 @@
 (function () {
   console.log('🚀 S4R41VA SaaS Wrapper: Started...');
 
-  const BASE_URL = 'https://qpassa-chatwootwrapper.v1dvzt.easypanel.host'; // Ajuste conforme necessário
+  const BASE_URL = 'https://wrapper.s4r41va.com'; // Ajuste conforme necessário
   const MENU_LABEL_SCHEDULE = 'Agendar';
   const MENU_LABEL_FOLLOWUP = 'Follow-up';
 
