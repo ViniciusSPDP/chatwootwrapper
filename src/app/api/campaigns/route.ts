@@ -16,7 +16,8 @@ export async function POST(request: Request) {
       accountId,
       token,
       client,
-      uid
+      uid,
+      postSendLabel // Nova propriedade opcional
     } = body;
 
     if (!name || !label || !inboxId || !steps || !steps.length || minDelay == null || maxDelay == null || !chatwootUrl || !token) {
@@ -157,6 +158,7 @@ export async function POST(request: Request) {
         tenantId: tenant.id,
         totalContacts: scheduledMessages.length, // Usamos quantity real para o worker preencher certinho
         status: 'RUNNING',
+        postSendLabel: postSendLabel || null // Salva a etiqueta se fornecida
       }
     });
 

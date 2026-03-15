@@ -154,6 +154,32 @@ async function processScheduledMessages() {
         data: { status: 'SENT', errorLog: null }
       });
 
+      // Aplica a Etiqueta Pós-Envio se a campanha tiver uma configurada
+      if (msg.campaign && msg.campaign.postSendLabel) {
+        try {
+          console.log(`[Worker] Aplicando etiqueta pós-envio "${msg.campaign.postSendLabel}" na conversa ${conversationId}`);
+          const labelUrl = `${tenant.chatwootUrl}/api/v1/accounts/${tenant.accountId}/conversations/${conversationId}/labels`;
+          
+          const labelRes = await fetchWithTimeout(labelUrl, {
+            method: 'POST',
+            headers: {
+              ...headers,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ labels: [msg.campaign.postSendLabel] })
+          });
+          
+          if (!labelRes.ok) {
+            const labelErrText = await labelRes.text();
+            console.error(`[Worker] Falha ao aplicar etiqueta ${labelRes.status}: ${labelErrText}`);
+          } else {
+            console.log(`[Worker] Etiqueta "${msg.campaign.postSendLabel}" aplicada com sucesso.`);
+          }
+        } catch (labelErr) {
+          console.error(`[Worker] Erro ao aplicar etiqueta:`, labelErr);
+        }
+      }
+
       if (msg.campaignId) {
         const updatedCampaign = await prisma.campaign.update({
           where: { id: msg.campaignId },

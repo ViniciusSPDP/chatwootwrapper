@@ -39,6 +39,7 @@ function CampaignContent() {
   // Form State
   const [name, setName] = useState('');
   const [selectedLabel, setSelectedLabel] = useState('');
+  const [postSendLabel, setPostSendLabel] = useState('');
   const [selectedInbox, setSelectedInbox] = useState('');
   const [minDelay, setMinDelay] = useState(3);
   const [maxDelay, setMaxDelay] = useState(15);
@@ -173,6 +174,7 @@ function CampaignContent() {
         body: JSON.stringify({
           name,
           label: selectedLabel,
+          postSendLabel: postSendLabel || null,
           inboxId: selectedInbox,
           steps: steps.map(({ type, content, delaySeconds }) => ({ type, content, delaySeconds: Number(delaySeconds) })),
           minDelay: Number(minDelay),
@@ -190,6 +192,7 @@ function CampaignContent() {
 
       showToast(`Campanha criada com sucesso! ${data.scheduledCount} mensagens agendadas.`, "success");
       setName('');
+      setPostSendLabel('');
       setSteps([{ id: Date.now().toString(), type: 'text', content: '', delaySeconds: 10 }]);
       fetchCampaigns();
     } catch (err: any) {
@@ -236,9 +239,23 @@ function CampaignContent() {
                ref={fileInputRef} 
                onChange={handleFileUpload} 
              />
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Nome da Ação</label>
-              <input required type="text" className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100" placeholder="Ex: Campanha Black Friday" value={name} onChange={e => setName(e.target.value)} />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Nome da Ação</label>
+                <input required type="text" className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100" placeholder="Ex: Campanha Black Friday" value={name} onChange={e => setName(e.target.value)} />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  Etiqueta Pós-Envio <span className="text-slate-500 font-normal">(Opcional)</span>
+                </label>
+                <select className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100" value={postSendLabel} onChange={e => setPostSendLabel(e.target.value)}>
+                  <option value="">Não adicionar etiqueta</option>
+                  {labels.map(l => (
+                    <option key={l.title} value={l.title}>{l.title}</option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-6">

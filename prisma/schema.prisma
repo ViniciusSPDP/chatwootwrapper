@@ -79,6 +79,7 @@ model Campaign {
   status        String   @default("RUNNING") // RUNNING, PAUSED, COMPLETED, CANCELLED
   totalContacts Int
   sentCount     Int      @default(0)
+  postSendLabel String?
   createdAt     DateTime @default(now())
   
   messages      ScheduledMessage[]
