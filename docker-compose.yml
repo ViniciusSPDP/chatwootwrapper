@@ -3,15 +3,26 @@ services:
   db:
     image: postgres:15-alpine
     container_name: wrapper_db
-    restart: "no"
+    restart: always
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: minhasenha
-      POSTGRES_DB: chatwoot_wrapper
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+
+  app:
+    build: . 
+    container_name: wrapper_app
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+    depends_on:
+      - db
 
 volumes:
   postgres_data:
