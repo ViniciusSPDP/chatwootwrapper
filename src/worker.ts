@@ -158,6 +158,23 @@ async function processScheduledMessages() {
       if (msg.campaign && msg.campaign.postSendLabel) {
         try {
           console.log(`[Worker] Aplicando etiqueta pós-envio "${msg.campaign.postSendLabel}" na conversa ${conversationId}`);
+
+          // 1. Buscar as etiquetas atuais da conversa para não sobrescrever
+          const getConvUrl = `${tenant.chatwootUrl}/api/v1/accounts/${tenant.accountId}/conversations/${conversationId}`;
+          const convDetailsRes = await fetchWithTimeout(getConvUrl, {
+            headers
+          });
+
+          let currentLabels: string[] = [];
+          if (convDetailsRes.ok) {
+            const convDetails = await convDetailsRes.json();
+            // Dependendo da versão, labels vem em payload.labels ou direto
+            currentLabels = convDetails.labels || (convDetails.payload && convDetails.payload.labels) || [];
+          }
+
+          // 2. Adicionar a nova etiqueta mantendo as antigas (Set para evitar duplicação)
+          const newLabels = Array.from(new Set([...currentLabels, msg.campaign.postSendLabel]));
+
           const labelUrl = `${tenant.chatwootUrl}/api/v1/accounts/${tenant.accountId}/conversations/${conversationId}/labels`;
           
           const labelRes = await fetchWithTimeout(labelUrl, {
@@ -166,14 +183,14 @@ async function processScheduledMessages() {
               ...headers,
               'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ labels: [msg.campaign.postSendLabel] })
+            body: JSON.stringify({ labels: newLabels })
           });
           
           if (!labelRes.ok) {
             const labelErrText = await labelRes.text();
             console.error(`[Worker] Falha ao aplicar etiqueta ${labelRes.status}: ${labelErrText}`);
           } else {
-            console.log(`[Worker] Etiqueta "${msg.campaign.postSendLabel}" aplicada com sucesso.`);
+            console.log(`[Worker] Etiqueta "${msg.campaign.postSendLabel}" aplicada com sucesso (Total: ${newLabels.length} etiquetas).`);
           }
         } catch (labelErr) {
           console.error(`[Worker] Erro ao aplicar etiqueta:`, labelErr);
