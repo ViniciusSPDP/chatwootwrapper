@@ -14,7 +14,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
 
   app:
-    build: .
+    image: chatwoot-wrapper-2-app
     container_name: wrapper_app_novo
     restart: always
     ports:
