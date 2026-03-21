@@ -29,6 +29,8 @@ model Tenant {
   scheduledMessages ScheduledMessage[]
   followUps         FollowUp[]
   campaigns         Campaign[]
+  aiAgent           AiAgent?
+  tokenUsages       TokenUsage[]
   
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -83,4 +85,36 @@ model Campaign {
   createdAt     DateTime @default(now())
   
   messages      ScheduledMessage[]
+}
+
+model AiAgent {
+  id               String   @id @default(uuid())
+  tenantId         String   @unique
+  tenant           Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  
+  isActive         Boolean  @default(false)
+  prompt           String?  @db.Text
+  openAiKey        String?
+  elevenLabsApiKey String?
+  elevenLabsVoiceId String?
+  modelName        String   @default("gpt-4o-mini")
+  temperature      Float    @default(0.2)
+  inboxIds         Int[]    // Permite rodar o Agente em múltiplas Inboxes específicas
+  
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model TokenUsage {
+  id               String   @id @default(uuid())
+  tenantId         String
+  tenant           Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  
+  date             DateTime @default(now())
+  conversationId   Int?
+  promptTokens     Int      @default(0)
+  completionTokens Int      @default(0)
+  totalCost        Float    @default(0) // Armazenado em USD ou centavos
+  
+  createdAt        DateTime @default(now())
 }

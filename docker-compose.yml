@@ -27,8 +27,17 @@ services:
       - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
       - MINIO_BUCKET_NAME=${MINIO_BUCKET_NAME}
       - MINIO_PUBLIC_URL=${MINIO_PUBLIC_URL}
+      - REDIS_URL=redis://redis:6379
     depends_on:
       - db
+      - redis
+
+  redis:
+    image: redis:alpine
+    container_name: wrapper_redis
+    restart: always
+    ports:
+      - "6381:6379"
 
 volumes:
   postgres_data:
