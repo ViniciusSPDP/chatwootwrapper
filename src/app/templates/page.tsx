@@ -11,6 +11,7 @@ interface WhatsAppInbox {
   provider_config?: {
     business_account_id?: string;
     phone_number_id?: string;
+    api_key?: string;
   };
 }
 
@@ -116,9 +117,11 @@ function TemplatesPageContent() {
         setInboxes(wa);
         if (wa.length > 0) {
           setSelectedInboxId(wa[0].id);
-          // Tenta preencher WABA ID automaticamente da config do inbox
+          // Tenta preencher WABA ID e token automaticamente da config do inbox
           const wabaFromInbox = wa[0].provider_config?.business_account_id;
+          const apiKeyFromInbox = wa[0].provider_config?.api_key;
           if (wabaFromInbox && !wabaId) setWabaId(wabaFromInbox);
+          if (apiKeyFromInbox && !accessToken) setAccessToken(apiKeyFromInbox);
         }
       }
     } catch {
