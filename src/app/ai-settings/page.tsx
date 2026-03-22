@@ -8,6 +8,8 @@ function AiSettingsContent() {
   const accountId = searchParams.get('accountId');
   const token = searchParams.get('token');
   const chatwootUrl = searchParams.get('chatwootUrl');
+  const client = searchParams.get('client');
+  const uid = searchParams.get('uid');
   const theme = searchParams.get('theme') || 'light';
 
   const [loading, setLoading] = useState(true);
@@ -28,7 +30,14 @@ function AiSettingsContent() {
 
   const fetchSettings = async () => {
     try {
-      const res = await fetch(`/api/ai-settings?accountId=${accountId}&token=${token}&chatwootUrl=${encodeURIComponent(chatwootUrl!)}`);
+      const queryParams = new URLSearchParams({
+        accountId: accountId || '',
+        token: token || '',
+        chatwootUrl: chatwootUrl || '',
+        client: client || '',
+        uid: uid || ''
+      }).toString();
+      const res = await fetch(`/api/ai-settings?${queryParams}`);
       const data = await res.json();
       if (res.ok) {
         setAgent(data.agent);
@@ -49,7 +58,14 @@ function AiSettingsContent() {
   const saveSettings = async () => {
     setSaving(true);
     try {
-      const res = await fetch(`/api/ai-settings?accountId=${accountId}&token=${token}&chatwootUrl=${encodeURIComponent(chatwootUrl!)}`, {
+      const queryParams = new URLSearchParams({
+        accountId: accountId || '',
+        token: token || '',
+        chatwootUrl: chatwootUrl || '',
+        client: client || '',
+        uid: uid || ''
+      }).toString();
+      const res = await fetch(`/api/ai-settings?${queryParams}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
