@@ -5,6 +5,8 @@
   const MENU_LABEL_SCHEDULE = 'Agendar';
   const MENU_LABEL_FOLLOWUP = 'Follow-up';
 
+  let whatsappInboxes = []; // Caixas de entrada Channel::Whatsapp detectadas
+
   // ============================================================
   // 1. ESTILOS CSS
   // ============================================================
@@ -151,7 +153,9 @@
     // Handle Title and Layout
     const headerTitle = document.querySelector('.saas-panel-title');
     if (headerTitle) {
-      headerTitle.textContent = page === 'campaign' ? 'Envio em Massa' : 'Agendamento';
+      headerTitle.textContent = page === 'campaign' ? 'Envio em Massa' :
+                               page === 'templates' ? 'Templates WhatsApp' :
+                               'Agendamento';
     }
 
     if (isFullScreen) {
@@ -285,8 +289,7 @@
 
     item.onclick = (e) => {
       e.preventDefault();
-      // Pass isFullScreen true if page is 'campaign'
-      openPanel(page, page === 'campaign');
+      openPanel(page, page === 'campaign' || page === 'templates');
     };
 
     li.appendChild(item);
@@ -379,23 +382,29 @@
     if (siblingBtn) {
       btn.className = siblingBtn.className;
       // Ajustes de espaçamento manuais para garantir que não fique colado ou cortado
-      btn.style.marginLeft = '8px';
-      btn.style.marginRight = '8px';
+      btn.style.marginLeft = '4px';
+      btn.style.marginRight = '4px';
 
       // Forçar bordas arredondadas (caso esteja herdando classe de grupo que remove borda)
       btn.style.borderRadius = '8px';
-      // Remover arredondamentos parciais comuns em grupos (ex: rounded-r-md)
       btn.style.borderTopLeftRadius = '8px';
       btn.style.borderBottomLeftRadius = '8px';
       btn.style.borderTopRightRadius = '8px';
       btn.style.borderBottomRightRadius = '8px';
     } else {
-      // Fallback de estilo se não tiver irmão (improvável se achou container)
-      btn.style.cssText = "display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 8px; cursor: pointer; color: inherit; margin-left: 8px; margin-right: 8px;";
+      // Fallback de estilo se não tiver irmão
+      btn.style.cssText = "display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 8px; cursor: pointer; color: inherit; margin-left: 4px; margin-right: 4px;";
     }
 
-    // Ícone de Calendário
-    btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>`;
+    // Garantir que a cor e o display sejam sempre corretos independente das classes copiadas
+    btn.style.color = 'inherit';
+    btn.style.display = 'inline-flex';
+    btn.style.alignItems = 'center';
+    btn.style.justifyContent = 'center';
+    btn.style.flexShrink = '0';
+
+    // Ícone de Calendário — SVG dentro de span para evitar colapso de renderização
+    btn.innerHTML = `<span style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;flex-shrink:0;pointer-events:none;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg></span>`;
 
     btn.onclick = (e) => {
       e.preventDefault();
@@ -415,12 +424,71 @@
   }
 
   function monitorHeaderConfig() {
+    // Flag para evitar múltiplas tentativas simultâneas (debounce interno)
+    let pending = false;
+
     const observer = new MutationObserver(() => {
-      createHeaderButton();
+      // Se o botão já existe no DOM, ignora — evita trabalho desnecessário
+      if (document.getElementById('saas-floating-widget')) return;
+      if (pending) return;
+      pending = true;
+      setTimeout(() => {
+        createHeaderButton();
+        pending = false;
+      }, 150);
     });
+
     observer.observe(document.body, { childList: true, subtree: true });
-    // Tenta criar imediatamente também
-    createHeaderButton();
+
+    // Retry dedicado para garantir criação mesmo quando o header ainda não renderizou
+    let retries = 0;
+    const retry = setInterval(() => {
+      if (createHeaderButton() || ++retries >= 15) clearInterval(retry);
+    }, 500);
+  }
+
+  // ============================================================
+  // 6. DETECÇÃO DE CAIXAS DE ENTRADA WHATSAPP (API OFICIAL)
+  // ============================================================
+  async function detectWhatsAppInboxes(accountId, auth) {
+    try {
+      const res = await fetch(`${window.location.origin}/api/v1/accounts/${accountId}/inboxes`, {
+        headers: {
+          'api_access_token': auth.token,
+          'client': auth.client || '',
+          'uid': auth.uid || ''
+        }
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      const inboxes = data.payload || data;
+      if (!Array.isArray(inboxes)) return;
+
+      whatsappInboxes = inboxes.filter(
+        inbox => inbox.channel_type === 'Channel::Whatsapp'
+      );
+
+      console.log('[SaaS Wrapper] WhatsApp inboxes detectadas:', whatsappInboxes.length);
+
+      if (whatsappInboxes.length > 0) {
+        initTemplatesMenu();
+      }
+    } catch (e) {
+      console.error('[SaaS Wrapper] Falha ao detectar caixas WhatsApp:', e);
+    }
+  }
+
+  function initTemplatesMenu() {
+    const iconTemplate = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 8 9"/></svg>`;
+
+    // Retry para garantir que a sidebar já foi inicializada
+    let attempts = 0;
+    const interval = setInterval(() => {
+      attempts++;
+      if (addSidebarItem('Templates WA', iconTemplate, 'saas-templates-btn', 'templates') || attempts > 20) {
+        clearInterval(interval);
+      }
+    }, 1000);
   }
 
   // ============================================================
@@ -439,6 +507,15 @@
     }, 1000);
 
     monitorHeaderConfig();
+
+    // Detectar caixas WhatsApp para exibir menu de Templates (assíncrono, não bloqueia)
+    const auth = getAuthFromCookie();
+    if (auth) {
+      const urlMatch = window.location.pathname.match(/\/app\/accounts\/(\d+)/);
+      if (urlMatch) {
+        detectWhatsAppInboxes(urlMatch[1], auth);
+      }
+    }
   }
 
   if (document.readyState === 'loading') {
