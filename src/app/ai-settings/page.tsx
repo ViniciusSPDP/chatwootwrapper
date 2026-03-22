@@ -15,6 +15,7 @@ function AiSettingsContent() {
   const [agent, setAgent] = useState<any>(null);
   const [inboxes, setInboxes] = useState<any[]>([]);
   const [financial, setFinancial] = useState<any>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   
   // Tab state: 0 = Configuração, 1 = Financeiro
   const [activeTab, setActiveTab] = useState(0);
@@ -28,14 +29,18 @@ function AiSettingsContent() {
   const fetchSettings = async () => {
     try {
       const res = await fetch(`/api/ai-settings?accountId=${accountId}&token=${token}&chatwootUrl=${encodeURIComponent(chatwootUrl!)}`);
+      const data = await res.json();
       if (res.ok) {
-        const data = await res.json();
         setAgent(data.agent);
         setInboxes(data.inboxes || []);
         setFinancial(data.financial);
+        setErrorMsg(null);
+      } else {
+        setErrorMsg(data.error || 'Erro ao carregar dados do tenant.');
       }
     } catch (error) {
       console.error('Error fetching settings', error);
+      setErrorMsg('Erro de conexão ao buscar dados.');
     } finally {
       setLoading(false);
     }
@@ -93,24 +98,36 @@ function AiSettingsContent() {
     <div className={`min-h-screen ${isDark ? 'bg-slate-900 text-slate-100' : 'bg-slate-50 text-slate-900'} p-6 font-sans`}>
       <div className="max-w-4xl mx-auto">
         
+        {/* Error Message */}
+        {errorMsg && (
+          <div className="p-4 bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-200 rounded-lg mb-6 text-center border border-red-200 dark:border-red-800/50">
+             <p className="font-bold text-lg mb-1">Erro de Integração</p>
+             <p className="text-sm mb-2">{errorMsg}</p>
+             <p className="text-xs opacity-80">Verifique se o seu Tenant está cadastrado corretamente no banco de dados.</p>
+             <p className="text-xs opacity-80 mt-1">Conta: <strong>{accountId}</strong> | URL: <strong>{chatwootUrl}</strong></p>
+          </div>
+        )}
+
         {/* Header Tabs */}
-        <div className="flex mb-6 border-b border-slate-200 dark:border-slate-700">
-          <button 
-            onClick={() => setActiveTab(0)}
-            className={`py-3 px-6 font-medium text-sm transition-colors border-b-2 ${activeTab === 0 ? 'border-blue-600 text-blue-600 dark:text-blue-400' : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'}`}
-          >
-            Configuração do Agente
-          </button>
-          <button 
-            onClick={() => setActiveTab(1)}
-            className={`py-3 px-6 font-medium text-sm transition-colors border-b-2 ${activeTab === 1 ? 'border-blue-600 text-blue-600 dark:text-blue-400' : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'}`}
-          >
-            Painel Financeiro (Tokens)
-          </button>
-        </div>
+        {!errorMsg && (
+          <div className="flex mb-6 border-b border-slate-200 dark:border-slate-700">
+            <button 
+              onClick={() => setActiveTab(0)}
+              className={`py-3 px-6 font-medium text-sm transition-colors border-b-2 ${activeTab === 0 ? 'border-blue-600 text-blue-600 dark:text-blue-400' : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'}`}
+            >
+              Configuração do Agente
+            </button>
+            <button 
+              onClick={() => setActiveTab(1)}
+              className={`py-3 px-6 font-medium text-sm transition-colors border-b-2 ${activeTab === 1 ? 'border-blue-600 text-blue-600 dark:text-blue-400' : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'}`}
+            >
+              Painel Financeiro (Tokens)
+            </button>
+          </div>
+        )}
 
         {/* TAB 0: CONFIGURAÇÕES */}
-        {activeTab === 0 && agent && (
+        {activeTab === 0 && agent && !errorMsg && (
           <div className={`rounded-xl shadow-sm border ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'} p-6`}>
             
             <div className="flex items-center justify-between mb-8 pb-4 border-b border-slate-200 dark:border-slate-700">
