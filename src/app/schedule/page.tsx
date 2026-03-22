@@ -68,7 +68,15 @@ function SchedulePageContent() {
 
   const fetchMessages = async () => {
     try {
-      const res = await fetch(`/api/schedule?conversationId=${conversationId}`);
+      const query = new URLSearchParams({
+        conversationId: conversationId || '',
+        accountId: accountId || '',
+        token: token || '',
+        client: client || '',
+        uid: uid || '',
+        chatwootUrl: chatwootUrl || ''
+      }).toString();
+      const res = await fetch(`/api/schedule?${query}`);
       const data = await res.json();
       if (data.success) {
         setMessages(data.data);
@@ -87,7 +95,14 @@ function SchedulePageContent() {
     try {
       if (editingId) {
         // Edit
-        await fetch(`/api/schedule/${editingId}`, {
+        const query = new URLSearchParams({
+          accountId: accountId || '',
+          token: token || '',
+          client: client || '',
+          uid: uid || '',
+          chatwootUrl: chatwootUrl || ''
+        }).toString();
+        await fetch(`/api/schedule/${editingId}?${query}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ message: newMessage, scheduledAt: new Date(newDate).toISOString() }),
@@ -132,7 +147,14 @@ function SchedulePageContent() {
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure?')) return;
     try {
-      await fetch(`/api/schedule/${id}`, { method: 'DELETE' });
+      const query = new URLSearchParams({
+        accountId: accountId || '',
+        token: token || '',
+        client: client || '',
+        uid: uid || '',
+        chatwootUrl: chatwootUrl || ''
+      }).toString();
+      await fetch(`/api/schedule/${id}?${query}`, { method: 'DELETE' });
       fetchMessages();
     } catch (err) {
       alert('Error deleting message');
