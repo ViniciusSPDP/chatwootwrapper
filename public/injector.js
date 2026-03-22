@@ -184,9 +184,9 @@
 
     // 2. Fetch Profile (para validar token e obter fallback se necessário)
     try {
-      const res = await fetch(`${BASE_URL}/api/v1/profile`, {
+      const res = await fetch(`${window.location.origin}/api/v1/profile`, {
         headers: {
-          'api_access_token': auth.token,
+          'access-token': auth.token,
           'client': auth.client,
           'uid': auth.uid
         }

@@ -5,9 +5,11 @@ import axios from 'axios';
 // Validar token no Chatwoot para segurança
 async function validateToken(chatwootUrl: string, token: string, client?: string, uid?: string) {
   try {
-    const headers: any = { 'api_access_token': token };
-    if (client) headers['client'] = client;
-    if (uid) headers['uid'] = uid;
+    const headers: any = client && uid ? {
+      'access-token': token,
+      'client': client,
+      'uid': uid
+    } : { 'api_access_token': token };
 
     const res = await axios.get(`${chatwootUrl}/api/v1/profile`, { headers });
     return res.data;
@@ -17,11 +19,15 @@ async function validateToken(chatwootUrl: string, token: string, client?: string
 }
 
 // Fetch inboxes available to the account
-async function getChatwootInboxes(chatwootUrl: string, accountId: string, token: string) {
+async function getChatwootInboxes(chatwootUrl: string, accountId: string, token: string, client?: string, uid?: string) {
   try {
-    const res = await axios.get(`${chatwootUrl}/api/v1/accounts/${accountId}/inboxes`, {
-      headers: { 'api_access_token': token }
-    });
+    const headers: any = client && uid ? {
+      'access-token': token,
+      'client': client,
+      'uid': uid
+    } : { 'api_access_token': token };
+
+    const res = await axios.get(`${chatwootUrl}/api/v1/accounts/${accountId}/inboxes`, { headers });
     return res.data.payload.map((i: any) => ({
       id: i.id,
       name: i.name,
@@ -88,7 +94,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Buscar Inboxes da conta no Chatwoot para o painel de seleção
-    const inboxes = await getChatwootInboxes(chatwootUrl, accountId, token);
+    const inboxes = await getChatwootInboxes(chatwootUrl, accountId, token, client || undefined, uid || undefined);
 
     // Calculando totais do painel financeiro do tenant
     const usages = await prisma.tokenUsage.findMany({
