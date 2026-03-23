@@ -7,12 +7,11 @@ if [ -z "$DATABASE_URL" ]; then
   exit 1
 fi
 
-echo "🔄 Rodando Prisma Migrations (Usando binário local)..."
+echo "🔄 Sincronizando schema do banco (prisma db push)..."
 
-# MUDANÇA AQUI: Usamos npx para garantir que o prisma carregue o config.ts via tsx/jiti
-npx prisma migrate deploy
+npx prisma db push --accept-data-loss
 
-echo "✅ Migrations aplicadas com sucesso."
+echo "✅ Schema sincronizado com sucesso."
 
 # Start Worker in Background
 echo "🚀 Starting Background Worker..."
