@@ -41,19 +41,22 @@ model ScheduledMessage {
   id             String   @id @default(uuid())
   tenantId       String
   tenant         Tenant   @relation(fields: [tenantId], references: [id])
-  
-  conversationId Int?      
+
+  conversationId Int?
   contactId      Int?
   inboxId        Int?
-  content        String   
-  attachmentUrl  String?  
-  scheduledAt    DateTime 
-  status         String   @default("PENDING") 
-  
-  errorLog       String?  
-  
+  content        String
+  attachmentUrl  String?
+  attachmentType String?  // "text" | "image" | "video" | "audio" | "document"
+  attachmentName String?  // nome do documento
+  waMessageId    String?  // ID retornado pela Meta API (WA API campaigns)
+  scheduledAt    DateTime
+  status         String   @default("PENDING")
+
+  errorLog       String?
+
   createdAt      DateTime @default(now())
-  
+
   campaignId     String?
   campaign       Campaign? @relation(fields: [campaignId], references: [id])
 }
@@ -72,15 +75,23 @@ model FollowUp {
 }
 
 model Campaign {
-  id            String   @id @default(uuid())
-  tenantId      String
-  tenant        Tenant   @relation(fields: [tenantId], references: [id])
-  name          String
-  status        String   @default("RUNNING") // RUNNING, PAUSED, COMPLETED, CANCELLED
-  totalContacts Int
-  sentCount     Int      @default(0)
-  postSendLabel String?
-  createdAt     DateTime @default(now())
-  
-  messages      ScheduledMessage[]
+  id               String   @id @default(uuid())
+  tenantId         String
+  tenant           Tenant   @relation(fields: [tenantId], references: [id])
+  name             String
+  status           String   @default("RUNNING") // RUNNING, PAUSED, COMPLETED, CANCELLED
+  type             String   @default("CHATWOOT") // "CHATWOOT" | "WHATSAPP_API"
+  totalContacts    Int
+  sentCount        Int      @default(0)
+  postSendLabel    String?
+  // WhatsApp API campaign fields
+  wabaId           String?
+  phoneNumberId    String?
+  accessToken      String?
+  templateName     String?
+  templateLanguage String?
+  templateVarMap   String?  // JSON: [{position:1, source:"name"|"phone"|"attr"|"static", value:"..."}]
+  createdAt        DateTime @default(now())
+
+  messages         ScheduledMessage[]
 }

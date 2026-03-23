@@ -1,19 +1,45 @@
 import 'dotenv/config';
 import prisma from './lib/prisma';
 
+const META_API_VERSION = 'v20.0';
+const META_BASE = `https://graph.facebook.com/${META_API_VERSION}`;
+
+// Resolve {{attr_key}} in a string using conversation custom_attributes
+async function resolveCustomAttributes(
+  content: string,
+  chatwootUrl: string,
+  accountId: number,
+  conversationId: number,
+  headers: Record<string, string>
+): Promise<string> {
+  if (!content.includes('{{')) return content;
+
+  try {
+    const res = await fetchWithTimeout(
+      `${chatwootUrl}/api/v1/accounts/${accountId}/conversations/${conversationId}`,
+      { headers }
+    );
+    if (!res.ok) return content;
+    const data = await res.json();
+    const attrs: Record<string, string> = data.custom_attributes || (data.payload && data.payload.custom_attributes) || {};
+
+    return content.replace(/\{\{(\w+)\}\}/g, (_, key) => {
+      return attrs[key] != null ? String(attrs[key]) : '';
+    });
+  } catch {
+    return content;
+  }
+}
+
 async function processScheduledMessages() {
   const now = new Date();
-  
-  // LOG DE DEPURAÇÃO: Verificando o tempo atual do servidor
+
   console.log(`[Worker][${now.toISOString()}] Verificando mensagens pendentes...`);
 
-  // 1. Find pending messages that are due
   const messages = await prisma.scheduledMessage.findMany({
     where: {
       status: 'PENDING',
-      scheduledAt: {
-        lte: now // Menor ou igual a "agora"
-      },
+      scheduledAt: { lte: now },
       OR: [
         { campaignId: null },
         { campaign: { status: 'RUNNING' } }
@@ -23,16 +49,12 @@ async function processScheduledMessages() {
       tenant: true,
       campaign: true
     },
-    orderBy: {
-      scheduledAt: 'asc'
-    }
+    orderBy: { scheduledAt: 'asc' }
   });
 
-  // LOG DE DEPURAÇÃO: Mostrar quantas foram encontradas e o critério de tempo
   if (messages.length === 0) {
-    // Vamos verificar se existe ALGUMA mensagem pendente, mesmo que seja para o futuro
     const anyPending = await prisma.scheduledMessage.findFirst({
-      where: { 
+      where: {
         status: 'PENDING',
         OR: [
           { campaignId: null },
@@ -41,11 +63,11 @@ async function processScheduledMessages() {
       },
       orderBy: { scheduledAt: 'asc' }
     });
-    
+
     if (anyPending) {
-      console.log(`[Worker] Nenhuma mensagem pronta para envio. Próxima mensagem pendente está agendada para: ${anyPending.scheduledAt.toISOString()}`);
+      console.log(`[Worker] Próxima mensagem pendente: ${anyPending.scheduledAt.toISOString()}`);
     } else {
-      console.log(`[Worker] Nenhuma mensagem pendente encontrada no banco.`);
+      console.log(`[Worker] Nenhuma mensagem pendente.`);
     }
   } else {
     console.log(`[Worker] Encontradas ${messages.length} mensagens para enviar.`);
@@ -53,12 +75,23 @@ async function processScheduledMessages() {
 
   for (const msg of messages) {
     try {
-      console.log(`[Worker] Enviando MSG ID: ${msg.id} | Agendada para: ${msg.scheduledAt.toISOString()}`);
-      
-      const { tenant } = msg;
-      
+      console.log(`[Worker] Enviando MSG ID: ${msg.id} | Agendada: ${msg.scheduledAt.toISOString()}`);
+
+      const { tenant, campaign } = msg;
+
+      // ============================================================
+      // BRANCH: WhatsApp API (Meta) campaign
+      // ============================================================
+      if (campaign?.type === 'WHATSAPP_API') {
+        await handleWhatsAppApiMessage(msg, tenant, campaign);
+        continue;
+      }
+
+      // ============================================================
+      // BRANCH: Chatwoot campaign (existing logic)
+      // ============================================================
       const headers: Record<string, string> = {
-        'access-token': tenant.apiAccessToken, // FIXED: header name must be 'access-token'
+        'access-token': tenant.apiAccessToken,
         'client': tenant.client || '',
         'uid': tenant.uid || '',
       };
@@ -68,81 +101,81 @@ async function processScheduledMessages() {
       if (!conversationId && msg.contactId && msg.inboxId) {
         console.log(`[Worker] Criando conversa para o contato ${msg.contactId}`);
         const createConvUrl = `${tenant.chatwootUrl}/api/v1/accounts/${tenant.accountId}/conversations`;
-        
+
         try {
-          // Usando fetchWithTimeout (15s limite)
           const convRes = await fetchWithTimeout(createConvUrl, {
             method: 'POST',
-            headers: {
-              ...headers,
-              'Content-Type': 'application/json'
-            },
+            headers: { ...headers, 'Content-Type': 'application/json' },
             body: JSON.stringify({
               inbox_id: msg.inboxId,
               contact_id: String(msg.contactId),
-              status: "open"
+              status: 'open'
             })
           });
 
           if (!convRes.ok) {
-             const errText = await convRes.text();
-             throw new Error(`Failed to create conversation: ${convRes.status} - ${errText}`);
+            const errText = await convRes.text();
+            throw new Error(`Failed to create conversation: ${convRes.status} - ${errText}`);
           }
-          
+
           const convData = await convRes.json();
           conversationId = convData.id || (convData.payload && convData.payload.id);
-          
-          if (!conversationId) {
-              throw new Error('Não foi possível obter o ID da conversa criada.');
-          }
+
+          if (!conversationId) throw new Error('Não foi possível obter o ID da conversa criada.');
 
           await prisma.scheduledMessage.update({
             where: { id: msg.id },
             data: { conversationId }
           });
         } catch (convErr) {
-            console.error(`[Worker] Erro ao criar conversa:`, convErr);
-            throw convErr; // Interrompe e vai pro catch principal do loop
+          console.error(`[Worker] Erro ao criar conversa:`, convErr);
+          throw convErr;
         }
       }
 
       if (!conversationId) {
-         throw new Error('Sem conversationId e sem dados para criar uma nova.');
+        throw new Error('Sem conversationId e sem dados para criar uma nova.');
+      }
+
+      // Resolve {{attr_key}} no content
+      let resolvedContent = msg.content;
+      if (resolvedContent.includes('{{')) {
+        resolvedContent = await resolveCustomAttributes(
+          resolvedContent,
+          tenant.chatwootUrl,
+          tenant.accountId,
+          conversationId,
+          headers
+        );
       }
 
       const url = `${tenant.chatwootUrl}/api/v1/accounts/${tenant.accountId}/conversations/${conversationId}/messages`;
-      
+
       let body: string | FormData;
 
       if (msg.attachmentUrl) {
-        // Prepare FormData for attachment
         const attachmentRes = await fetchWithTimeout(msg.attachmentUrl);
         if (!attachmentRes.ok) throw new Error(`Failed to fetch attachment: ${attachmentRes.statusText}`);
         const blob = await attachmentRes.blob();
-        
+
         const formData = new FormData();
-        formData.append('content', msg.content);
+        formData.append('content', msg.attachmentType === 'audio' ? '' : resolvedContent);
         formData.append('message_type', 'outgoing');
         formData.append('private', 'false');
-        formData.append('attachments[]', blob, 'file'); // 'file' name is arbitrary but needed
-        
+        const filename = msg.attachmentName || 'file';
+        formData.append('attachments[]', blob, filename);
+
         body = formData;
-        // Do NOT set Content-Type header manually for FormData
       } else {
-        // Send as JSON
         headers['Content-Type'] = 'application/json';
         body = JSON.stringify({
-          content: msg.content,
-          message_type: 'outgoing', 
-          private: false 
+          content: resolvedContent,
+          message_type: 'outgoing',
+          private: false
         });
       }
-      
-      const response = await fetchWithTimeout(url, {
-        method: 'POST',
-        headers,
-        body
-      });
+
+      const response = await fetchWithTimeout(url, { method: 'POST', headers, body });
 
       if (!response.ok) {
         const errText = await response.text();
@@ -154,99 +187,218 @@ async function processScheduledMessages() {
         data: { status: 'SENT', errorLog: null }
       });
 
-      // Aplica a Etiqueta Pós-Envio se a campanha tiver uma configurada
+      // Aplicar etiqueta pós-envio
       if (msg.campaign && msg.campaign.postSendLabel) {
-        try {
-          console.log(`[Worker] Aplicando etiqueta pós-envio "${msg.campaign.postSendLabel}" na conversa ${conversationId}`);
-
-          // 1. Buscar as etiquetas atuais da conversa para não sobrescrever
-          const getConvUrl = `${tenant.chatwootUrl}/api/v1/accounts/${tenant.accountId}/conversations/${conversationId}`;
-          const convDetailsRes = await fetchWithTimeout(getConvUrl, {
-            headers
-          });
-
-          let currentLabels: string[] = [];
-          if (convDetailsRes.ok) {
-            const convDetails = await convDetailsRes.json();
-            // Dependendo da versão, labels vem em payload.labels ou direto
-            currentLabels = convDetails.labels || (convDetails.payload && convDetails.payload.labels) || [];
-          }
-
-          // 2. Adicionar a nova etiqueta mantendo as antigas (Set para evitar duplicação)
-          const newLabels = Array.from(new Set([...currentLabels, msg.campaign.postSendLabel]));
-
-          const labelUrl = `${tenant.chatwootUrl}/api/v1/accounts/${tenant.accountId}/conversations/${conversationId}/labels`;
-          
-          const labelRes = await fetchWithTimeout(labelUrl, {
-            method: 'POST',
-            headers: {
-              ...headers,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ labels: newLabels })
-          });
-          
-          if (!labelRes.ok) {
-            const labelErrText = await labelRes.text();
-            console.error(`[Worker] Falha ao aplicar etiqueta ${labelRes.status}: ${labelErrText}`);
-          } else {
-            console.log(`[Worker] Etiqueta "${msg.campaign.postSendLabel}" aplicada com sucesso (Total: ${newLabels.length} etiquetas).`);
-          }
-        } catch (labelErr) {
-          console.error(`[Worker] Erro ao aplicar etiqueta:`, labelErr);
-        }
+        await applyPostSendLabel(
+          tenant.chatwootUrl,
+          tenant.accountId,
+          conversationId,
+          msg.campaign.postSendLabel,
+          headers
+        );
       }
 
-      if (msg.campaignId) {
-        const updatedCampaign = await prisma.campaign.update({
-          where: { id: msg.campaignId },
-          data: { sentCount: { increment: 1 } }
-        });
+      await updateCampaignProgress(msg);
 
-        if (updatedCampaign.sentCount >= updatedCampaign.totalContacts) {
-          await prisma.campaign.update({
-            where: { id: msg.campaignId },
-            data: { status: 'COMPLETED' }
-          });
-          console.log(`[Worker] Campanha ${updatedCampaign.id} finalizada (COMPLETED).`);
-        } else {
-          // Check if 50 contacts were sent today
-          const startOfDay = new Date();
-          startOfDay.setHours(0, 0, 0, 0);
-
-          const sentToday = await prisma.scheduledMessage.findMany({
-             where: {
-                 status: 'SENT',
-                 campaignId: msg.campaignId,
-                 scheduledAt: { gte: startOfDay }
-             },
-             select: { conversationId: true },
-             distinct: ['conversationId']
-          });
-
-          if (sentToday.length >= 50) {
-             await prisma.campaign.update({
-                where: { id: msg.campaignId },
-                data: { status: 'PAUSED' }
-             });
-             console.log(`[Worker] Limite de 50 contatos/dia atingido. Campanha ${msg.campaignId} pausada.`);
-          }
-        }
-      }
-      
-      console.log(`[Worker] Mensagem ${msg.id} enviada com sucesso.`);
+      console.log(`[Worker] Mensagem ${msg.id} enviada com sucesso (Chatwoot).`);
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       console.error(`[Worker] Falha ao enviar mensagem ${msg.id}:`, errorMessage);
-      
+
       await prisma.scheduledMessage.update({
         where: { id: msg.id },
-        data: { 
+        data: {
           status: 'FAILED',
           errorLog: errorMessage.slice(0, 1000)
         }
       });
+    }
+  }
+}
+
+// ============================================================
+// WhatsApp API message handler
+// ============================================================
+async function handleWhatsAppApiMessage(
+  msg: { id: string; content: string; conversationId: number | null; campaign: { phoneNumberId: string | null; accessToken: string | null; postSendLabel: string | null } | null; campaignId: string | null },
+  tenant: { chatwootUrl: string; accountId: number; apiAccessToken: string; client: string | null; uid: string | null },
+  campaign: { phoneNumberId: string | null; accessToken: string | null; postSendLabel: string | null }
+) {
+  let contentData: { type: string; phone: string; templateName: string; language: string; variables: Record<string, string> };
+
+  try {
+    contentData = JSON.parse(msg.content);
+  } catch {
+    throw new Error('WA_TEMPLATE: content JSON inválido');
+  }
+
+  if (!campaign.phoneNumberId || !campaign.accessToken) {
+    throw new Error('WA_TEMPLATE: campaign sem phoneNumberId ou accessToken');
+  }
+
+  // Resolver {{attr_key}} nas variáveis se necessário
+  const headers: Record<string, string> = {
+    'access-token': tenant.apiAccessToken,
+    'client': tenant.client || '',
+    'uid': tenant.uid || '',
+  };
+
+  const resolvedVars: Record<string, string> = {};
+  for (const [pos, val] of Object.entries(contentData.variables || {})) {
+    if (typeof val === 'string' && val.includes('{{') && msg.conversationId) {
+      resolvedVars[pos] = await resolveCustomAttributes(
+        val,
+        tenant.chatwootUrl,
+        tenant.accountId,
+        msg.conversationId,
+        headers
+      );
+    } else {
+      resolvedVars[pos] = val;
+    }
+  }
+
+  // Montar componentes do template
+  const bodyParameters = Object.entries(resolvedVars)
+    .sort(([a], [b]) => Number(a) - Number(b))
+    .map(([, text]) => ({ type: 'text', text }));
+
+  const templatePayload: Record<string, unknown> = {
+    messaging_product: 'whatsapp',
+    to: contentData.phone,
+    type: 'template',
+    template: {
+      name: contentData.templateName,
+      language: { code: contentData.language },
+      ...(bodyParameters.length > 0 && {
+        components: [{ type: 'body', parameters: bodyParameters }]
+      })
+    }
+  };
+
+  const metaRes = await fetchWithTimeout(
+    `${META_BASE}/${campaign.phoneNumberId}/messages`,
+    {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${campaign.accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(templatePayload)
+    }
+  );
+
+  const metaData = await metaRes.json();
+
+  if (!metaRes.ok) {
+    const errMsg = metaData?.error?.message || `Meta API Error: ${metaRes.status}`;
+    throw new Error(errMsg);
+  }
+
+  const waMessageId = metaData.messages?.[0]?.id || null;
+
+  await prisma.scheduledMessage.update({
+    where: { id: msg.id },
+    data: { status: 'SENT', errorLog: null, waMessageId }
+  });
+
+  // Aplicar etiqueta pós-envio
+  if (campaign.postSendLabel && msg.conversationId) {
+    await applyPostSendLabel(
+      tenant.chatwootUrl,
+      tenant.accountId,
+      msg.conversationId,
+      campaign.postSendLabel,
+      headers
+    );
+  }
+
+  await updateCampaignProgress(msg);
+
+  console.log(`[Worker] Mensagem ${msg.id} enviada via Meta API. waMessageId: ${waMessageId}`);
+}
+
+// ============================================================
+// Helpers compartilhados
+// ============================================================
+async function applyPostSendLabel(
+  chatwootUrl: string,
+  accountId: number,
+  conversationId: number,
+  label: string,
+  headers: Record<string, string>
+) {
+  try {
+    const getConvUrl = `${chatwootUrl}/api/v1/accounts/${accountId}/conversations/${conversationId}`;
+    const convRes = await fetchWithTimeout(getConvUrl, { headers });
+
+    let currentLabels: string[] = [];
+    if (convRes.ok) {
+      const convDetails = await convRes.json();
+      currentLabels = convDetails.labels || (convDetails.payload && convDetails.payload.labels) || [];
+    }
+
+    const newLabels = Array.from(new Set([...currentLabels, label]));
+    const labelUrl = `${chatwootUrl}/api/v1/accounts/${accountId}/conversations/${conversationId}/labels`;
+
+    const labelRes = await fetchWithTimeout(labelUrl, {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ labels: newLabels })
+    });
+
+    if (!labelRes.ok) {
+      const errText = await labelRes.text();
+      console.error(`[Worker] Falha ao aplicar etiqueta ${labelRes.status}: ${errText}`);
+    } else {
+      console.log(`[Worker] Etiqueta "${label}" aplicada.`);
+    }
+  } catch (err) {
+    console.error(`[Worker] Erro ao aplicar etiqueta:`, err);
+  }
+}
+
+async function updateCampaignProgress(
+  msg: { campaignId: string | null; conversationId: number | null }
+) {
+  if (!msg.campaignId) return;
+
+  const updatedCampaign = await prisma.campaign.update({
+    where: { id: msg.campaignId },
+    data: { sentCount: { increment: 1 } }
+  });
+
+  if (updatedCampaign.sentCount >= updatedCampaign.totalContacts) {
+    await prisma.campaign.update({
+      where: { id: msg.campaignId },
+      data: { status: 'COMPLETED' }
+    });
+    console.log(`[Worker] Campanha ${updatedCampaign.id} finalizada (COMPLETED).`);
+    return;
+  }
+
+  // Limite de 50 contatos/dia (apenas campanha Chatwoot)
+  if (updatedCampaign.type === 'CHATWOOT') {
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+
+    const sentToday = await prisma.scheduledMessage.findMany({
+      where: {
+        status: 'SENT',
+        campaignId: msg.campaignId,
+        scheduledAt: { gte: startOfDay }
+      },
+      select: { conversationId: true },
+      distinct: ['conversationId']
+    });
+
+    if (sentToday.length >= 50) {
+      await prisma.campaign.update({
+        where: { id: msg.campaignId },
+        data: { status: 'PAUSED' }
+      });
+      console.log(`[Worker] Limite de 50 contatos/dia atingido. Campanha ${msg.campaignId} pausada.`);
     }
   }
 }
@@ -268,23 +420,18 @@ async function runWorkerLoop() {
   try {
     await processScheduledMessages();
   } catch (err) {
-    console.error('[Worker] Erro no loop de intervalo:', err);
+    console.error('[Worker] Erro no loop:', err);
   } finally {
-    // Agenda para daqui a 10s APÓS o ciclo atual (sucesso ou falha) terminar
     setTimeout(runWorkerLoop, 10000);
   }
 }
 
 async function startWorker() {
-  // Garantir que o log de início apareça
   console.log('==============================================');
   console.log('[Worker] Iniciando loop de varredura...');
   console.log(`[Worker] Hora atual do servidor: ${new Date().toISOString()}`);
   console.log('==============================================');
-  
-  // Inicia o processo recursivo que aguarda a conclusão antes de reiniciar
   runWorkerLoop();
 }
 
-// Inicia o processo
 startWorker();

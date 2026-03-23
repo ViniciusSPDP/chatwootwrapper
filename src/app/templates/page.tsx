@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, Suspense, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 
 interface WhatsAppInbox {
@@ -28,6 +28,8 @@ interface TemplateForm {
   language: string;
   headerType: 'NONE' | 'TEXT' | 'IMAGE' | 'VIDEO' | 'DOCUMENT';
   headerText: string;
+  headerMediaUrl: string;
+  headerFilename: string;
   body: string;
   footer: string;
   buttons: TemplateButton[];
@@ -56,6 +58,8 @@ const EMPTY_FORM: TemplateForm = {
   language: 'pt_BR',
   headerType: 'NONE',
   headerText: '',
+  headerMediaUrl: '',
+  headerFilename: '',
   body: '',
   footer: '',
   buttons: [],
@@ -79,6 +83,34 @@ function TemplatesPageContent() {
   const [loadingInboxes, setLoadingInboxes] = useState(true);
   const [toast, setToast] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [uploadingHeader, setUploadingHeader] = useState(false);
+  const headerFileRef = useRef<HTMLInputElement>(null);
+
+  async function handleHeaderUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingHeader(true);
+    const formData = new FormData();
+    formData.append('files', file);
+    try {
+      const res = await fetch('/api/upload', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (data.success && data.urls?.[0]) {
+        setForm((f) => ({
+          ...f,
+          headerMediaUrl: data.urls[0],
+          headerFilename: f.headerFilename || file.name,
+        }));
+      } else {
+        showToast('error', data.error || 'Falha no upload');
+      }
+    } catch {
+      showToast('error', 'Erro ao enviar arquivo');
+    } finally {
+      setUploadingHeader(false);
+      if (headerFileRef.current) headerFileRef.current.value = '';
+    }
+  }
   const [existingTemplates, setExistingTemplates] = useState<Record<string, unknown>[]>([]);
   const [loadingTemplates, setLoadingTemplates] = useState(false);
 
@@ -185,7 +217,12 @@ function TemplatesPageContent() {
       if (form.headerType === 'TEXT') {
         components.push({ type: 'HEADER', format: 'TEXT', text: form.headerText });
       } else {
-        components.push({ type: 'HEADER', format: form.headerType, example: { header_handle: ['PLACEHOLDER'] } });
+        const headerComp: Record<string, unknown> = {
+          type: 'HEADER',
+          format: form.headerType,
+          example: { header_handle: [form.headerMediaUrl || 'PLACEHOLDER'] },
+        };
+        components.push(headerComp);
       }
     }
 
@@ -512,7 +549,7 @@ function TemplatesPageContent() {
                   <div>
                     <label style={{ fontSize: 12, color: labelColor, display: 'block', marginBottom: 4 }}>Cabeçalho (opcional)</label>
                     <div style={{ display: 'flex', gap: 8 }}>
-                      <select value={form.headerType} onChange={(e) => setForm((f) => ({ ...f, headerType: e.target.value as TemplateForm['headerType'], headerText: '' }))} style={{ ...inputStyle, width: 'auto' }}>
+                      <select value={form.headerType} onChange={(e) => setForm((f) => ({ ...f, headerType: e.target.value as TemplateForm['headerType'], headerText: '', headerMediaUrl: '', headerFilename: '' }))} style={{ ...inputStyle, width: 'auto' }}>
                         <option value="NONE">Nenhum</option>
                         <option value="TEXT">Texto</option>
                         <option value="IMAGE">Imagem</option>
@@ -530,7 +567,37 @@ function TemplatesPageContent() {
                         />
                       )}
                       {form.headerType !== 'NONE' && form.headerType !== 'TEXT' && (
-                        <span style={{ fontSize: 12, color: sub, alignSelf: 'center' }}>O arquivo será enviado ao usar o template no Chatwoot</span>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <input
+                              type="file"
+                              ref={headerFileRef}
+                              className="hidden"
+                              accept={form.headerType === 'IMAGE' ? 'image/*' : form.headerType === 'VIDEO' ? 'video/*' : '*/*'}
+                              onChange={handleHeaderUpload}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => headerFileRef.current?.click()}
+                              disabled={uploadingHeader}
+                              style={{ ...inputStyle, cursor: 'pointer', width: 'auto', padding: '4px 10px', fontSize: 12 }}
+                            >
+                              {uploadingHeader ? '⏳ Enviando...' : '📎 Upload MinIO'}
+                            </button>
+                            {form.headerMediaUrl && (
+                              <span style={{ fontSize: 11, color: '#10b981' }}>✅ Arquivo carregado</span>
+                            )}
+                          </div>
+                          {form.headerType === 'DOCUMENT' && (
+                            <input
+                              type="text"
+                              value={form.headerFilename}
+                              onChange={(e) => setForm((f) => ({ ...f, headerFilename: e.target.value }))}
+                              placeholder="Nome do documento (ex: Proposta.pdf)"
+                              style={{ ...inputStyle, fontSize: 12 }}
+                            />
+                          )}
+                        </div>
                       )}
                     </div>
                   </div>

@@ -7,15 +7,18 @@ export async function POST(request: Request) {
     const body = await request.json();
 
     // 1. Validar dados recebidos (Basicão)
-    const { 
-      message, 
-      scheduledAt, 
-      conversationId, 
-      accountId, 
-      chatwootUrl, 
+    const {
+      message,
+      scheduledAt,
+      conversationId,
+      accountId,
+      chatwootUrl,
       token,
-      client, // NOVO
-      uid     // NOVO
+      client,
+      uid,
+      attachmentType,  // "text" | "image" | "video" | "audio" | "document"
+      attachmentName,  // nome do documento
+      attachmentUrl,   // URL MinIO (quando enviado separado do message)
     } = body;
 
     // Nota: client/uid são opcionais no schema, então não precisamos validar estritamente se não quiser
@@ -55,10 +58,13 @@ export async function POST(request: Request) {
     const agendamento = await prisma.scheduledMessage.create({
       data: {
         content: message,
-        scheduledAt: new Date(scheduledAt), // Converte string ISO para Date
+        scheduledAt: new Date(scheduledAt),
         conversationId: Number(conversationId),
         status: 'PENDING',
-        tenantId: tenant.id
+        tenantId: tenant.id,
+        attachmentUrl: attachmentUrl || null,
+        attachmentType: attachmentType || 'text',
+        attachmentName: attachmentName || null,
       }
     });
 
