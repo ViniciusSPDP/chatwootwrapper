@@ -107,7 +107,7 @@ function SchedulePageContent() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newDate) return;
-    if (mediaType !== 'audio' && !newMessage) return;
+    if (mediaType === 'text' && !newMessage) return;
     if (mediaType !== 'text' && !attachmentUrl) return;
 
     try {

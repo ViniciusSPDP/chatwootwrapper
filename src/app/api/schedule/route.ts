@@ -22,9 +22,16 @@ export async function POST(request: Request) {
     } = body;
 
     // Nota: client/uid são opcionais no schema, então não precisamos validar estritamente se não quiser
-    if (!message || !scheduledAt || !conversationId || !chatwootUrl || !token) {
+    if (!scheduledAt || !conversationId || !chatwootUrl || !token) {
       return NextResponse.json(
         { error: 'Dados incompletos. Verifique o payload.' },
+        { status: 400 }
+      );
+    }
+    // Mensagem é obrigatória apenas para tipo texto
+    if ((!attachmentType || attachmentType === 'text') && !message) {
+      return NextResponse.json(
+        { error: 'Mensagem obrigatória para tipo texto.' },
         { status: 400 }
       );
     }
